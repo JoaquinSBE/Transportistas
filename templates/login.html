@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Ingresar · Transportistas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
+    .wrap{ min-height:100dvh; display:grid; place-items:center; padding:24px; }
+    .card{
+      width:100%; max-width:420px; background:var(--card); border-radius:var(--radius);
+      border:1px solid var(--ring);
+      box-shadow:0 1px 2px rgba(15,23,42,.06), 0 6px 14px rgba(2,6,23,.04);
+      padding:22px 18px;
+    }
+    .brand{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .brand .logo{
+      width:36px; height:36px; border-radius:10px;
+      background:linear-gradient(135deg, var(--brand-2), #7aa7ff);
+      display:grid; place-items:center; color:#fff; font-weight:800;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);
+    }
+    .brand h1{ font-size:20px; margin:0 }
+    .muted{ color:var(--muted); font-size:13px; margin-bottom:14px }
+
+    label{ font-size:12px; color:var(--muted); display:block; margin:8px 2px 6px }
+    .in{
+      width:100%; min-height:40px; padding:10px 12px; border-radius:10px;
+      border:1px solid var(--ring); background:#fff; color:var(--ink);
+    }
+    .in:focus{ outline:none; border-color:#b5c8ff; box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+
+    .row{ display:flex; gap:10px; align-items:center }
+    .btn{
+      width:100%; min-height:40px; padding:10px 12px; border-radius:10px; cursor:pointer;
+      border:1px solid var(--brand-2); background:var(--brand-2); color:#fff; font-weight:700;
+    }
+    .btn:focus{ outline:none; box-shadow:0 0 0 3px rgba(37,99,235,.2); }
+
+    .pass-wrap{ position:relative }
+    .toggle{
+      position:absolute; right:8px; top:50%; transform:translateY(-50%);
+      border:1px solid var(--ring); background:#fff; color:var(--muted);
+      border-radius:8px; padding:4px 8px; cursor:pointer; font-size:12px;
+    }
+
+    /* flashes */
+    .flashes{ margin:8px 0 0 0; }
+    .flash{
+      background:#fde8e8; color:#7a1d1d; border:1px solid #f6caca; border-radius:10px;
+      padding:8px 10px; font-size:13px; margin-top:8px;
+    }
+
+    /* footer */
+    .foot{ margin-top:12px; text-align:center; color:var(--muted); font-size:12px }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="brand">
+        <div class="logo">SB</div>
+        <h1>Logistica</h1>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for category, message in messages %}
+            <div class="flash">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% endwith %}
+
+      <form method="post" action="{{ url_for('login') }}" style="margin-top:6px;">
+        <label for="usuario">Usuario</label>
+        <input class="in" id="usuario" name="usuario" type="text" placeholder="tu.usuario" autofocus required>
+
+        <label for="clave">Contraseña</label>
+        <div class="pass-wrap">
+          <input class="in" id="clave" name="clave" type="password" placeholder="********" required>
+          <button class="toggle" type="button" onclick="togglePass()">Ver</button>
+        </div>
+
+        <div style="margin-top:14px;">
+          <button class="btn" type="submit">Ingresar</button>
+        </div>
+      </form>
+
+      <div class="foot">© San Benito Energía</div>
+    </div>
+  </div>
+
+  <script>
+    function togglePass(){
+      const input = document.getElementById('clave');
+      const btn = document.querySelector('.toggle');
+      const isPass = input.type === 'password';
+      input.type = isPass ? 'text' : 'password';
+      btn.textContent = isPass ? 'Ocultar' : 'Ver';
+      input.focus();
+    }
+    // Enter en usuario va a clave:
+    document.getElementById('usuario').addEventListener('keydown', e=>{
+      if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('clave').focus(); }
+    });
+  </script>
+</body>
+</html>

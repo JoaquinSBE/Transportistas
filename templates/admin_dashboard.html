@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard · Transportistas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root{
+      /* mismos tokens que admin_panel */
+      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
+      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
+    a{ color:var(--brand-2); text-decoration:none } a:hover{ text-decoration:underline }
+    .wrap{ max-width:1200px; margin:28px auto; padding:0 16px; }
+    .header{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+    .header h1{ margin:0; font-size:28px }
+    .actions{ display:flex; gap:8px; flex-wrap:wrap }
+    .btn{
+      min-height:36px; padding:8px 14px; border-radius:10px; cursor:pointer;
+      border:1px solid var(--brand-2); background:var(--brand-2); color:#fff; font-weight:600; text-decoration:none;
+      display:inline-flex; align-items:center; gap:6px;
+    }
+    .btn.outline{ background:#fff; color:var(--brand-2); }
+    .card{
+      background:var(--card); border-radius:var(--radius);
+      box-shadow:0 1px 2px rgba(15,23,42,.06), 0 6px 14px rgba(2,6,23,.04);
+      border:1px solid var(--ring); display:flex; flex-direction:column; min-width:0;
+    }
+    .card-h{ padding:14px 16px; border-bottom:1px solid var(--ring); display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+    .card-h h3{ margin:0; font-size:18px }
+    .card-b{ padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+    .grid{ display:grid; gap:16px }
+    .grid-kpi{ grid-template-columns:repeat(4,1fr); }
+    .grid-bottom{ grid-template-columns:1fr 1fr; }
+    @media (max-width:1000px){ .grid-kpi,.grid-bottom{ grid-template-columns:1fr 1fr } }
+    @media (max-width:640px){ .grid-kpi{ grid-template-columns:1fr } .grid-bottom{ grid-template-columns:1fr } }
+    .kpi{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    gap:2px;                 /* espacio entre label, valor y pill */
+    min-height:flex;         /* da aire dentro de la tarjeta */
+    }
+    .kpi .label{ font-size:12px; color:var(--muted) }
+    .kpi .value{ font-size:28px; font-weight:700 }
+    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
+    .pill.ok{ background:#e9f9f2; color:#0d7a5a }
+    .pill.warn{ background:#fff3d6; color:#8a5a07 }
+    .pill.bad{ background:#ffe4e4; color:#8a1a1a }
+
+    /* toolbar filtros */
+    .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+    .field{ display:flex; flex-direction:column; gap:6px; }
+    label{ font-size:12px; color:var(--muted) }
+    .in{
+      min-height:36px; padding:8px 10px; border-radius:10px; border:1px solid var(--ring);
+      background:#fff; color:var(--ink);
+    }
+
+    /* tablas */
+    .table-wrap{ overflow:auto; -webkit-overflow-scrolling:touch; }
+    table{ width:100%; border-collapse:separate; border-spacing:0; }
+    th,td{ padding:10px 12px; border-bottom:1px solid var(--ring); font-size:14px; text-align:left; white-space:nowrap; }
+    th{ color:var(--muted); background:#fafbff; font-weight:600; position:sticky; top:0; }
+    tr:last-child td{ border-bottom:none; }
+    .muted{ color:var(--muted) }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>Dashboard</h1>
+      <div class="actions">
+        <a class="btn outline" href="{{ url_for('admin_panel') }}">Volver al panel</a>
+        <a class="btn" href="{{ url_for('logout') }}">Cerrar sesión</a>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-h">
+        <h3>Filtros</h3>
+        <div class="muted" id="lblRango">—</div>
+      </div>
+      <div class="card-b">
+        <div class="toolbar">
+          <div class="field">
+            <label for="range">Rango</label>
+            <select id="range" class="in">
+              <option value="today">Hoy</option>
+              <option value="week">Últimos 7 días</option>
+              <option value="month">Mes actual</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="from">Desde</label>
+            <input id="from" type="date" class="in" disabled>
+          </div>
+          <div class="field">
+            <label for="to">Hasta</label>
+            <input id="to" type="date" class="in" disabled>
+          </div>
+          <button id="apply" class="btn">Aplicar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-kpi">
+      <div class="card">
+        <div class="card-b">
+          <div class="kpi">
+            <div>
+              <div class="label">Movimientos</div>
+              <div class="value" id="k_total">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-b">
+          <div class="kpi">
+            <div>
+              <div class="label">En viaje</div>
+              <div class="value" id="k_viaje">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-b">
+          <div class="kpi">
+            <div>
+              <div class="label">Llegados</div>
+              <div class="value" id="k_lleg">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-b">
+          <div class="kpi">
+            <div>
+              <div class="label">Cancelados</div>
+              <div class="value" id="k_canc">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Serie temporal -->
+    <div class="card" style="margin-top:16px;">
+      <div class="card-h"><h3>Movimientos por día</h3></div>
+      <div class="card-b">
+        <canvas id="series" height="120"></canvas>
+      </div>
+    </div>
+
+    <!-- Tablas -->
+    <div class="grid grid-bottom" style="margin-top:16px;">
+      <div class="card">
+        <div class="card-h"><h3>Por arenera</h3></div>
+        <div class="card-b">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Arenera</th><th>Total</th><th>En viaje</th><th>Llegados</th><th>Cancelados</th></tr>
+              </thead>
+              <tbody id="tb_arenera"></tbody>
+            </table>
+          </div>
+          <div class="muted" id="na_arenera" style="display:none;">Sin datos en el rango.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Por transportista</h3></div>
+        <div class="card-b">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Transportista</th><th>Total</th><th>En viaje</th><th>Llegados</th><th>Cancelados</th></tr>
+              </thead>
+              <tbody id="tb_transp"></tbody>
+            </table>
+          </div>
+          <div class="muted" id="na_transp" style="display:none;">Sin datos en el rango.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+  const COLORS = {
+  lleg: { line: '#10b981', fill: 'rgba(16,185,129,.15)' },   // verde
+  viaje:{ line: '#f59e0b', fill: 'rgba(245,158,11,.15)' },   // naranja
+  canc: { line: '#ef4444', fill: 'rgba(239,68,68,.15)' }     // rojo
+  };
+let chart = null;
+
+function enableCustomDates(on){
+  document.getElementById('from').disabled = !on;
+  document.getElementById('to').disabled   = !on;
+}
+
+document.getElementById('range').addEventListener('change', e=>{
+  enableCustomDates(e.target.value === 'custom');
+});
+
+document.getElementById('apply').addEventListener('click', loadData);
+
+async function loadData(){
+  const range = document.getElementById('range').value;
+  const body  = {};
+  if(range === 'custom'){
+    const f = document.getElementById('from').value;
+    const t = document.getElementById('to').value;
+    if(f && t){ body.from = f; body.to = t; }
+  } else {
+    body.range = range;
+  }
+
+  const rsp = await fetch('{{ url_for("admin_dashboard_data") }}', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  const d = await rsp.json();
+
+  // KPIs
+  const k = d.kpi || {};
+  document.getElementById('k_total').textContent = k.total ?? 0;
+  document.getElementById('k_viaje').textContent = k.en_viaje ?? 0;
+  document.getElementById('k_lleg').textContent  = k.llegados ?? 0;
+  document.getElementById('k_canc').textContent  = k.cancelados ?? 0;
+  document.getElementById('lblRango').textContent = k.rango ? `${k.rango.from} al ${k.rango.to}` : '—';
+
+  // Tablas
+  const ar = d.por_arenera || [];
+  const tr = d.por_transportista || [];
+
+  const tA = document.getElementById('tb_arenera'); tA.innerHTML='';
+  document.getElementById('na_arenera').style.display = ar.length ? 'none' : 'block';
+  ar.forEach(r=>{
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${r.arenera}</td><td>${r.total}</td><td>${r.en_viaje}</td><td>${r.llegados}</td><td>${r.cancelados}</td>`;
+    tA.appendChild(row);
+  });
+
+  const tT = document.getElementById('tb_transp'); tT.innerHTML='';
+  document.getElementById('na_transp').style.display = tr.length ? 'none' : 'block';
+  tr.forEach(r=>{
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${r.transportista}</td><td>${r.total}</td><td>${r.en_viaje}</td><td>${r.llegados}</td><td>${r.cancelados}</td>`;
+    tT.appendChild(row);
+  });
+
+  // Serie temporal
+  const labels = (d.timeline && d.timeline.labels) || [];
+  const lleg   = (d.timeline && d.timeline.llegados) || [];
+  const viaje  = (d.timeline && d.timeline.en_viaje) || [];
+  const canc   = (d.timeline && d.timeline.cancelados) || [];
+
+  const ctx = document.getElementById('series').getContext('2d');
+  if(chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {
+          label:'Llegados',
+          data:lleg,
+          borderColor: COLORS.lleg.line,
+          backgroundColor: COLORS.lleg.fill,
+          pointBackgroundColor: COLORS.lleg.line,
+          tension:.25, pointRadius:4, fill:false
+        },
+        {
+          label:'En viaje',
+          data:viaje,
+          borderColor: COLORS.viaje.line,
+          backgroundColor: COLORS.viaje.fill,
+          pointBackgroundColor: COLORS.viaje.line,
+          tension:.25, pointRadius:4, fill:false
+        },
+        {
+          label:'Cancelados',
+          data:canc,
+          borderColor: COLORS.canc.line,
+          backgroundColor: COLORS.canc.fill,
+          pointBackgroundColor: COLORS.canc.line,
+          tension:.25, pointRadius:4, fill:false
+        }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{ y:{ beginAtZero:true } },
+      plugins:{ legend:{ position:'bottom' } }
+    }
+  });
+}
+
+// init: rango "hoy"
+enableCustomDates(false);
+loadData();
+</script>
+</body>
+</html>

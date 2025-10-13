@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Todos los Camiones</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin:20px; background:#f5f5f5; }
+    .container { max-width:1000px; margin:0 auto; background:white; padding:20px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
+    h1 { text-align:center; color:#333; }
+    .filters { text-align:center; margin-bottom:20px; }
+    .filters select, .filters input { margin:0 5px; padding:8px; border:1px solid #ddd; border-radius:4px; }
+    .filters button { padding:8px 12px; background:#17a2b8; color:white; border:none; border-radius:4px; cursor:pointer; }
+    .filters button:hover { background:#138496; }
+    table { width:100%; border-collapse:collapse; margin-top:20px; }
+    th, td { padding:8px; border:1px solid #e9ecef; text-align:left; }
+    th { background:#e3f2fd; }
+    .back { text-align:center; margin-top:20px; }
+    .back a { text-decoration:none; color:#007bff; }
+    .back a:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Listado de Camiones</h1>
+
+    <div class="filters">
+      <form method="get" style="display:inline-block;">
+        <select name="status">
+          <option value="">-- Estado --</option>
+          <option value="En viaje"   {% if status=='En viaje'   %}selected{% endif %}>En viaje</option>
+          <option value="Llego"      {% if status=='Llego'      %}selected{% endif %}>Llegados</option>
+          <option value="Cancelado"  {% if status=='Cancelado'  %}selected{% endif %}>Cancelados</option>
+        </select>
+        <input name="transportista" placeholder="Transportista" value="{{ transportista }}">
+        <input name="arenera"       placeholder="Arenera"       value="{{ arenera }}">
+        <button type="submit">Filtrar</button>
+      </form>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Transportista</th>
+          <th>Arenera</th>
+          <th>Chofer</th>
+          <th>DNI</th>
+          <th>Tipo</th>
+          <th>Tractor</th>
+          <th>Batea</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in shipments %}
+          <tr>
+            <td>{{ s.date }}</td>
+            <td>{{ s.transportista.username }}</td>
+            <td>{{ s.arenera.username }}</td>
+            <td>{{ s.chofer }}</td>
+            <td>{{ s.dni }}</td>
+            <td>{{ s.tipo }}</td>
+            <td>{{ s.tractor }}</td>
+            <td>{{ s.trailer }}</td>
+            <td>{{ s.status }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="9" style="text-align:center; color:#6c757d;">
+              No hay camiones que mostrar.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="back">
+      <a href="{{ url_for('admin_panel') }}">← Volver al Panel Admin</a>
+    </div>
+  </div>
+</body>
+</html>

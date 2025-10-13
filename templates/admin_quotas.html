@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Cuotas · {{ transportista.username }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
+      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
+    a{ color:var(--brand-2); text-decoration:none } a:hover{ text-decoration:underline }
+    .wrap{ max-width:1200px; margin:28px auto; padding:0 16px; }
+
+    .header{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+    .header h1{ margin:0; font-size:26px }
+    .actions{ display:flex; gap:8px; flex-wrap:wrap }
+    .btn{
+      min-height:36px; padding:8px 14px; border-radius:10px; cursor:pointer;
+      border:1px solid var(--brand-2); background:var(--brand-2); color:#fff; font-weight:600; text-decoration:none;
+      display:inline-flex; align-items:center; gap:6px;
+    }
+    .btn.outline{ background:#fff; color:var(--brand-2); }
+    .btn.ghost{ background:#fff; border-color:var(--ring); color:var(--ink); }
+
+    .card{
+      background:var(--card); border-radius:var(--radius);
+      box-shadow:0 1px 2px rgba(15,23,42,.06), 0 6px 14px rgba(2,6,23,.04);
+      border:1px solid var(--ring); display:flex; flex-direction:column; min-width:0;
+    }
+    .card-h{ padding:14px 16px; border-bottom:1px solid var(--ring); display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+    .card-h h3{ margin:0; font-size:18px }
+    .card-b{ padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+
+    .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+    label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px }
+    .in{ min-height:36px; padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--ink); width:100%; }
+    .in:focus{ outline:none; border-color:#b5c8ff; box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+
+    .table-wrap{ overflow:auto; -webkit-overflow-scrolling:touch; }
+    table{ width:100%; border-collapse:separate; border-spacing:0; }
+    th, td{ padding:10px 8px; border-bottom:1px solid var(--ring); font-size:14px; white-space:nowrap; }
+    th{ color:var(--muted); background:#fafbff; position:sticky; top:0; }
+    th.center, td.center{ text-align:center; }
+    tbody tr:nth-child(odd){ background:#fbfcff; }
+
+    .qcell{
+      position: relative;
+      height: 56px;              /* misma altura para todas las celdas */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .qcell input[type="number"]{
+      width: 80px;
+      text-align: center;
+      border: 1px solid var(--ring);
+      border-radius: 10px;
+      padding: 6px 8px;
+    }
+    .used-badge{
+      position:absolute; top:6px; right:8px;
+      font-size:11px; line-height:1; padding:2px 6px;
+      border-radius:999px; background:#e9f9f2; color:#0d7a5a; border:1px solid #cfeee1;
+      pointer-events:auto;              /* antes: none */
+      cursor:help;                      /* para indicar tooltip */
+    }
+    .sub{ color:var(--muted); font-size:12px }
+    .foot{ display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+  </style>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div style="max-width:1200px; margin:10px auto; padding:0 16px;">
+      {% for category, message in messages %}
+        <div style="background:#d1ecf1; color:#0c5460; border:1px solid #bee5eb; border-radius:8px; padding:10px 12px; margin-bottom:8px;">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% endwith %}
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>Cuotas · {{ transportista.username }}</h1>
+      <div class="actions">
+        <a class="btn outline" href="{{ url_for('admin_panel') }}">⬅ Volver</a>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-h">
+        <h3>Rango</h3>
+        <div class="sub">{{ week_dates[0].strftime('%d/%m') }} → {{ week_dates[-1].strftime('%d/%m') }}</div>
+      </div>
+      <div class="card-b">
+        <form method="get" action="{{ url_for('manage_quotas', transportista_id=transportista.id) }}" class="toolbar">
+          <div>
+            <label>Desde</label>
+            <input class="in" type="date" name="start" value="{{ start_date }}">
+          </div>
+          <button class="btn" type="submit">Aplicar</button>
+          <a class="btn ghost" href="{{ url_for('manage_quotas', transportista_id=transportista.id) }}">Hoy</a>
+        </form>
+      </div>
+    </div>
+
+    <!-- Grilla de cuotas -->
+    <form method="post" action="{{ url_for('manage_quotas', transportista_id=transportista.id) }}">
+      <input type="hidden" name="start_date" value="{{ start_date }}">
+      <div class="card">
+        <div class="card-h"><h3>Asignación de cuotas (7 días)</h3></div>
+        <div class="card-b">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Arenera</th>
+                  {% for d in week_dates %}
+                    <th class="center">{{ d.strftime('%d/%m') }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in areneras %}
+                <tr>
+                  <td>{{ a.username }}</td>
+                  {% for d in week_dates %}
+                    {% set q = quota_map.get((a.id, d)) %}
+                    {% set used = used_map.get((a.id, d), 0) %}
+                    <td class="center">
+                      <div class="qcell">
+                        {% set val = (q.limit if q else '') %}
+                        <input type="number" min="0" step="1"
+                              name="q_{{ a.id }}_{{ d }}"
+                              value="{{ '' if (val == 0) else val }}"
+                              placeholder="">
+                        {% if used > 0 %}
+                          <span class="used-badge"
+                                title="Camiones cargados ese día: {{ used }}"
+                                aria-label="Camiones cargados ese día: {{ used }}">
+                            {{ used }}
+                          </span>
+                        {% endif %}
+                      </div>
+                    </td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="foot">
+            <button class="btn" type="submit">Guardar cambios</button>
+          </div>
+          <div class="sub">  Tip: el número pequeño en la esquina del cupo muestra los camiones ya cargados por esa arenera en ese día. Para eliminar una cuota, dejá la celda vacía o ingresá 0.</div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- UX: Enter va a la siguiente celda -->
+  <script>
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' && e.target.matches('input[type="number"]')){
+        e.preventDefault();
+        const inputs = Array.from(document.querySelectorAll('input[type="number"]'));
+        const i = inputs.indexOf(e.target);
+        const next = inputs[i+1] || inputs[0];
+        next.focus(); next.select && next.select();
+      }
+    });
+  </script>
+</body>
+</html>

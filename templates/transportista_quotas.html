@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Cuotas · Transportista</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
+      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{ box-sizing:border-box }
+    html,body{
+      margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;
+      -webkit-text-size-adjust:100%;
+    }
+    .wrap{ max-width:760px; margin:0 auto; padding:16px 12px 80px; } /* espacio para navbar */
+
+    /* header */
+    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .hello{ display:flex; flex-direction:column; }
+    .hello h1{ margin:0; font-size:18px; }
+    .hello .sub{ color:var(--muted); font-size:12px; }
+    .btn-sm{
+      padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--brand-2);
+      text-decoration:none; font-weight:600;
+    }
+
+    /* selector de días */
+    .days{
+      position:sticky; top:0; z-index:5;
+      background:linear-gradient(#f5f7fb 60%, rgba(245,247,251,.85));
+      padding:10px 0 8px; margin-top:12px; border-bottom:1px solid var(--ring);
+    }
+    .days-scroll{
+    display:flex; gap:8px;
+    overflow-x:auto;
+    overflow-y:visible;
+    -webkit-overflow-scrolling:touch;
+    padding-top:4px;     
+    padding-bottom:4px;
+    }
+    .chip{
+      flex:0 0 auto;
+      width:64px;              /* ancho fijo */
+      aspect-ratio: 1 / 1;     /* alto = ancho (si preferís, podés usar height:64px) */
+      padding:0;               /* sin padding para no redondear */
+      border-radius:12px;      /* esquinas suaves; poné 0 para esquinas rectas */
+      border:1px solid var(--ring);
+      background:#fff; color:var(--ink);
+      font-weight:700; text-align:center;
+      display:flex; align-items:center; justify-content:center; flex-direction:column;
+      user-select:none; cursor:pointer;
+    }
+    .chip small{ display:block; font-weight:600; color:var(--muted); margin-top:2px; }
+
+    .chip.active{ border-color:var(--brand-2); box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+
+    /* cards */
+    .section{ margin-top:12px; }
+    .card{
+      background:var(--card); border-radius:var(--radius);
+      border:1px solid var(--ring);
+      box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04);
+      padding:12px; margin-top:10px;
+    }
+    .arena{ display:flex; gap:10px; align-items:center; }
+    .arena .meta{ flex:1; }
+    .arena .name{ font-weight:700; font-size:14px; }
+    .sub{ color:var(--muted); font-size:12px; }
+    .bar{ height:6px; width:100%; background:#eef2ff; border:1px solid var(--ring); border-radius:6px; overflow:hidden; margin-top:6px; }
+    .bar > span{ display:block; height:100%; background:linear-gradient(90deg, var(--brand-2), #7aa7ff); width:0%; }
+    .btn{
+      padding:10px 12px; border-radius:12px; border:1px solid var(--brand-2);
+      background:var(--brand-2); color:#fff; font-weight:700; text-decoration:none; display:inline-block;
+      min-width:140px; text-align:center;
+    }
+    .btn.disabled{ opacity:.5; pointer-events:none; }
+    .empty{ color:var(--muted); font-size:14px; text-align:center; padding:16px 8px; }
+
+    /* navbar inferior sticky */
+    .nav{
+      position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring);
+      display:flex; justify-content:space-around; padding:8px 10px; z-index:10;
+    }
+    .nav a{
+      flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700;
+      padding:10px 8px; border-radius:10px;
+    }
+    .nav a.active{ background:#eef2ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Header -->
+    <div class="top">
+      <div class="hello">
+        <h1>Mis cuotas</h1>
+      </div>
+      <a class="btn-sm" href="{{ url_for('logout') }}">Cerrar sesión</a>
+    </div>
+
+    <!-- Selector de días -->
+    <div class="days">
+      <div class="days-scroll" id="days">
+        {% for d in week_dates %}
+          {% set is_today = (d == week_dates[0]) %}
+          <div class="chip {{ 'active' if loop.index0 == 0 else '' }}"
+               data-date="{{ d.isoformat() }}"
+               role="button" tabindex="0">
+            {{ d.strftime('%d/%m') }}
+            {% if is_today %}<small>hoy</small>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Grillas por día -->
+    <div class="section" id="grids">
+      {% for d in week_dates %}
+        {% set qs = by_date.get(d, []) %}
+        <div class="day-grid" data-date="{{ d.isoformat() }}" style="{{ '' if loop.index0==0 else 'display:none' }}">
+          {% if qs and qs|length %}
+            {% for q in qs %}
+              {% set lim  = q.limit or 0 %}
+              {% set used = q.used or 0 %}
+              {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
+              <div class="card">
+                <div class="arena">
+                  <div class="meta">
+                    <div class="name">{{ q.arenera.username }}</div>
+                    <div class="sub">{{ used }} / {{ lim }} usados</div>
+                    <div class="bar"><span style="width:{{ pct }}%"></span></div>
+                  </div>
+                  <a class="btn {{ 'disabled' if (lim==0 or used>=lim) else '' }}"
+                     href="{{ url_for('transportista_arenera', arenera_id=q.arenera_id) }}?date={{ d.isoformat() }}">
+                    Cargar viaje
+                  </a>
+                </div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="card"><div class="empty">Sin cupos para {{ d.strftime('%d/%m') }}</div></div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Navbar inferior -->
+  <nav class="nav">
+    <a href="{{ url_for('transportista_panel') }}">Inicio</a>
+    <a class="active" href="{{ url_for('transportista_quotas') }}">Cuotas</a>
+  </nav>
+
+  <script>
+    // Tabs de días (mobile friendly)
+    (function(){
+      const chips = Array.from(document.querySelectorAll('.chip'));
+      const grids = Array.from(document.querySelectorAll('.day-grid'));
+
+      function activate(dateStr){
+        chips.forEach(c => c.classList.toggle('active', c.getAttribute('data-date')===dateStr));
+        grids.forEach(g => g.style.display = (g.getAttribute('data-date')===dateStr) ? '' : 'none');
+      }
+
+      chips.forEach(chip=>{
+        chip.addEventListener('click', ()=> activate(chip.getAttribute('data-date')));
+        chip.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); activate(chip.getAttribute('data-date')); }});
+      });
+    })();
+  </script>
+</body>
+</html>

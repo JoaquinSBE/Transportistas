@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Arenera</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
+      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; -webkit-text-size-adjust:100%; }
+    .wrap{ max-width:900px; margin:0 auto; padding:16px 12px 90px; }
+
+    /* header */
+    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .hello h1{ margin:0; font-size:18px }
+    .hello .sub{ color:var(--muted); font-size:12px }
+    .btn, .btn-sm, .btn-icon{
+      border:1px solid var(--brand-2); color:#fff; background:var(--brand-2);
+      border-radius:12px; padding:10px 12px; font-weight:800; text-decoration:none;
+    }
+    .btn-sm{ padding:8px 10px }
+    .btn-icon{ display:inline-flex; align-items:center; justify-content:center; min-width:44px; padding:8px 10px }
+    .btn.outline{ background:#fff; color:var(--brand-2) }
+
+    /* filtros sticky */
+    .filters{
+      position:sticky; top:0; z-index:5; padding:8px 0 0; margin-top:12px;
+      background:linear-gradient(#f5f7fb 60%, rgba(245,247,251,.9));
+      border-bottom:1px solid var(--ring);
+    }
+    .card{ background:var(--card); border-radius:var(--radius); border:1px solid var(--ring); box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04); padding:10px }
+    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .chip{ padding:8px 12px; border-radius:999px; border:1px solid var(--ring); background:#fff; color:var(--ink); font-weight:700; text-decoration:none }
+    .chip.active{ border-color:var(--brand-2); box-shadow:0 0 0 3px rgba(37,99,235,.15) }
+    .in{ flex:1; min-width:220px; min-height:40px; padding:10px 12px; border-radius:12px; border:1px solid var(--ring); background:#fff; color:var(--ink) }
+
+    /* lista compacta con banda lateral por estado */
+    .list{ margin-top:12px; display:flex; flex-direction:column; gap:10px }
+    .item{ display:grid; grid-template-columns:8px 1fr auto; gap:10px; align-items:center; background:#fff; border:1px solid var(--ring); border-radius:14px; padding:10px }
+    .band.ok{ background:#10b981 } .band.warn{ background:#f59e0b } .band.bad{ background:#ef4444 }
+    .title{ font-weight:800; }
+    .meta{ color:var(--muted); font-size:12px; margin-top:2px }
+    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
+    .pill.ok{ background:#e9f9f2; color:#0d7a5a; border:1px solid #cfeee1 }
+    .pill.warn{ background:#fff3d6; color:#8a5a07; border:1px solid #ffe7a3 }
+    .pill.bad{ background:#ffe4e4; color:#8a1a1a; border:1px solid #f7c2c2 }
+    .actions{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end }
+    .icon{ border:1px solid var(--ring); background:#fff; color:var(--brand-2); border-radius:10px; padding:8px 10px; font-weight:800; text-decoration:none }
+    .icon.red{ color:#ef4444; border-color:#f7c2c2 }
+    .nav{ position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring); display:flex; justify-content:space-around; padding:8px 10px; z-index:10 }
+    .nav a{ flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700; padding:10px 8px; border-radius:10px }
+    .nav a.active{ background:#eef2ff }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="hello">
+        <h1>Arenera</h1>
+        <div class="sub">{{ user.username }}</div>
+      </div>
+      <div class="row">
+        <a class="btn-icon" href="{{ url_for('change_password') }}" title="Ajustes">⚙️</a>
+        <a class="btn-sm" href="{{ url_for('logout') }}">Cerrar sesión</a>
+      </div>
+    </div>
+
+    <div class="filters">
+      <div class="card">
+        <form method="get" action="{{ url_for('arenera_panel') }}" style="display:flex; gap:8px;">
+          <input type="hidden" name="status" value="En viaje">
+          <input class="in" type="text" name="search"
+                placeholder="Buscar chofer / DNI / patente"
+                value="{{ search or '' }}">
+          <button class="btn" type="submit">Buscar</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="list">
+      {% if shipments %}
+        {% for s in shipments %}
+        <div class="item">
+          <div class="band {{ 'ok' if s.status=='Llego' else ('warn' if s.status=='En viaje' else 'bad') }}"></div>
+          <div>
+            <div class="title">{{ s.chofer }} · {{ s.dni }}</div>
+            <div class="meta">{{ s.date.strftime('%d/%m/%Y') if s.date else s.date }} · {{ s.tipo }} · Tractor: {{ s.tractor }} · Batea: {{ s.trailer }}</div>
+          </div>
+          <div class="actions">
+            {% if s.status == 'Llego' %}
+              <span class="pill ok">Llegó</span>
+            {% elif s.status == 'En viaje' %}
+              <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}">
+                <input type="hidden" name="status" value="Llego">
+                <button type="submit" class="icon">Llegó</button>
+              </form>
+              <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}">
+                <input type="hidden" name="status" value="Cancelado">
+                <button type="submit" class="icon red">✕</button>
+              </form>
+            {% else %}
+              <span class="pill bad">Cancelado</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="card" style="text-align:center; color:var(--muted);">No hay envíos en este estado.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <nav class="nav">
+    <a class="active" href="{{ url_for('arenera_panel') }}">Inicio</a>
+    <a href="{{ url_for('arenera_history') }}">Historial</a>
+  </nav>
+</body>
+</html>

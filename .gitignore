@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+
+# Entornos
+.venv/
+venv/
+
+# Datos locales (Render tiene FS efímero)
+Data/*.log
+camiones.db
+*.sqlite3

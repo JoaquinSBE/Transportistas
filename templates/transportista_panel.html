@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Panel del transportista</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
+      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;
+      -webkit-text-size-adjust:100%;
+    }
+    .wrap{ max-width:760px; margin:0 auto; padding:16px 12px 80px; } /* espacio para navbar */
+
+    /* header */
+    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .hello{ display:flex; flex-direction:column; }
+    .hello h1{ margin:0; font-size:18px; }
+    .hello .sub{ color:var(--muted); font-size:12px; }
+    .btn-sm{
+      padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--brand-2);
+      text-decoration:none; font-weight:600;
+    }
+
+    /* cards y listas */
+    .card{
+      background:var(--card); border-radius:var(--radius);
+      border:1px solid var(--ring); box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04);
+      margin-top:12px; padding:12px;
+    }
+    .kpis{ display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+    .kpi{ background:#fafbff; border:1px solid var(--ring); border-radius:12px; padding:10px; text-align:center; }
+    .kpi .tag{ font-size:11px; color:var(--muted); }
+    .kpi .val{ font-size:22px; font-weight:800; margin-top:2px; }
+    .kpi.ok  .val{ color:#0d7a5a } .kpi.warn .val{ color:#8a5a07 } .kpi.bad .val{ color:#8a1a1a }
+
+    .sec-h{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+    .sec-h h2{ margin:0; font-size:16px; }
+    .sub{ color:var(--muted); font-size:12px; }
+
+    /* areneras del día */
+    .arenas{ display:grid; gap:8px; }
+    .arena{ border:1px solid var(--ring); border-radius:12px; padding:10px; background:#fff; display:flex; gap:10px; align-items:center; }
+    .arena .meta{ flex:1; }
+    .arena .name{ font-weight:700; font-size:14px; }
+    .bar{ height:6px; width:100%; background:#eef2ff; border:1px solid var(--ring); border-radius:6px; overflow:hidden; margin-top:6px; }
+    .bar > span{ display:block; height:100%; background:linear-gradient(90deg, var(--brand-2), #7aa7ff); width:0%; }
+    .arena .act{ }
+    .btn{
+      padding:10px 12px; border-radius:12px; border:1px solid var(--brand-2);
+      background:var(--brand-2); color:#fff; font-weight:700; text-decoration:none; display:inline-block;
+      min-width:140px; text-align:center;
+    }
+    .btn.outline{ background:#fff; color:var(--brand-2); }
+    .btn[disabled]{ opacity:.5; pointer-events:none; }
+
+    /* lista de viajes */
+    .search{ margin-bottom:8px; }
+    .in{
+      width:100%; min-height:40px; padding:10px 12px; border-radius:12px; border:1px solid var(--ring); background:#fff; color:var(--ink);
+    }
+    .list{ display:flex; flex-direction:column; gap:8px; }
+    .trip{ border:1px solid var(--ring); border-radius:12px; background:#fff; padding:10px; }
+    .row{ display:flex; justify-content:space-between; gap:8px; }
+    .t-title{ font-weight:700; }
+    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
+    .pill.ok{ background:#e9f9f2; color:#0d7a5a; border:1px solid #cfeee1; }
+    .pill.warn{ background:#fff3d6; color:#8a5a07; border:1px solid #ffe7a3; }
+    .pill.bad{ background:#ffe4e4; color:#8a1a1a; border:1px solid #f7c2c2; }
+    .meta{ color:var(--muted); font-size:12px; margin-top:4px; }
+
+    /* navbar inferior sticky */
+    .nav{
+      position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring);
+      display:flex; justify-content:space-around; padding:8px 10px; z-index:10;
+    }
+    .nav a{
+      flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700;
+      padding:10px 8px; border-radius:10px;
+    }
+    .nav a.active{ background:#eef2ff; }
+    @media (min-width:740px){
+      .wrap{ padding-bottom:90px; }
+    }
+    .icon-btn{
+    border:1px solid var(--ring);
+    background:#fff;
+    color:#b91c1c;
+    border-radius:10px;
+    padding:6px 10px;
+    font-weight:700;
+    cursor:pointer;
+    margin-left:8px;
+  }
+  .icon-btn:focus{ outline:none; box-shadow:0 0 0 3px rgba(239,68,68,.15); }
+  .icon-btn:hover{ background:#fff5f5; }
+  .actions{ display:flex; align-items:center; gap:8px; }
+  .btn-icon{
+  padding:8px 10px; border-radius:10px;
+  border:1px solid var(--ring); background:#fff; color:var(--brand-2);
+  text-decoration:none; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
+  min-width:40px;
+  }
+  .btn-group{ display:flex; gap:8px; align-items:center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Header -->
+    <div class="top">
+      <div class="hello">
+        <h1>Hola, {{ user.username }}</h1>
+        <div class="sub">Hoy es {{ (today or datetime.utcnow().date()).strftime('%d/%m/%Y') }}</div>
+      </div>
+      <div class="btn-group">
+        <a class="btn-icon" href="{{ url_for('change_password') }}" title="Ajustes de cuenta">⚙️</a>
+        <a class="btn-sm"   href="{{ url_for('logout') }}">Cerrar sesión</a>
+      </div>
+    </div>
+
+    <!-- KPIs del día -->
+    <div class="card">
+      <div class="kpis">
+        <div class="kpi warn">
+          <div class="tag">En viaje</div>
+          <div class="val">{{ stats.en_viaje }}</div>
+        </div>
+        <div class="kpi ok">
+          <div class="tag">Llegados</div>
+          <div class="val">{{ stats.llegados }}</div>
+        </div>
+        <div class="kpi bad">
+          <div class="tag">Cancelados</div>
+          <div class="val">{{ stats.cancelados }}</div>
+        </div>
+      </div>
+      <div class="sub" style="margin-top:6px;">
+      Muestra los datos de la Semana: {{ stats.week_from.strftime('%d/%m') }} al {{ stats.week_to.strftime('%d/%m') }}
+      </div>
+    </div>
+
+    <!-- Cupos de hoy -->
+    <div class="card">
+      <div class="sec-h">
+        <h2>Tus cupos de hoy</h2>
+        <div class="sub">{{ assignments|length }} arenera{{ '' if assignments|length==1 else 's' }}</div>
+      </div>
+      {% if assignments %}
+      <div class="arenas">
+        {% for it in assignments %}
+          {% set used = it.daily_used or 0 %}
+          {% set lim  = it.daily_limit or 0 %}
+          {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
+          <div class="arena">
+            <div class="meta">
+              <div class="name">{{ it.arenera.username }}</div>
+              <div class="sub">{{ used }} / {{ lim }} usados</div>
+              <div class="bar"><span style="width:{{ pct }}%"></span></div>
+            </div>
+            <div class="act">
+              <a class="btn" href="{{ url_for('transportista_arenera', arenera_id=it.arenera.id) }}" {% if lim==0 or used>=lim %}aria-disabled="true" {% endif %}>
+                Cargar viaje
+              </a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      {% else %}
+        <div class="sub">No tenés cupos asignados hoy.</div>
+      {% endif %}
+    </div>
+
+    <!-- Viajes de hoy -->
+    <div class="card">
+      <div class="sec-h"><h2>Mis viajes</h2></div>
+      <div class="search">
+        <input id="q" class="in" type="text" placeholder="Buscar chofer / DNI / patente">
+      </div>
+      {% if envios and envios|length %}
+        <div class="list" id="lista">
+          {% for s in envios %}
+          <div class="trip" data-find="{{ (s.chofer ~ ' ' ~ s.dni ~ ' ' ~ s.tractor ~ ' ' ~ s.trailer)|lower }}">
+            <div class="row">
+              <div class="t-title">{{ s.chofer }}</div>
+              <div class="actions">
+                {% if s.status == 'Llego' %}
+                  <span class="pill ok">Llegó</span>
+                {% elif s.status == 'En viaje' %}
+                  <span class="pill warn">En viaje</span>
+                  <form method="post"
+                        action="{{ url_for('delete_own_shipment', ship_id=s.id) }}"
+                        onsubmit="return confirm('¿Eliminar este viaje?');"
+                        style="display:inline;">
+                    <button type="submit" class="icon-btn" title="Eliminar">✕</button>
+                  </form>
+                {% else %}
+                  <span class="pill bad">Cancelado</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="meta">
+              {{ s.date.strftime('%d/%m/%Y') }} · {{ s.arenera.username }} · {{ s.tipo }} · {{ s.tractor }} / {{ s.trailer }}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="sub">Aún no hay viajes cargados hoy.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Navbar inferior -->
+  <nav class="nav">
+    <a class="active" href="{{ url_for('transportista_panel') }}">Inicio</a>
+    <a href="{{ url_for('transportista_quotas') }}">Cuotas</a>
+  </nav>
+
+  <script>
+    // Búsqueda local en los viajes
+    (function(){
+      const q = document.getElementById('q');
+      const list = document.getElementById('lista');
+      if(!q || !list) return;
+      q.addEventListener('input', function(){
+        const needle = (q.value || '').trim().toLowerCase();
+        for(const card of list.children){
+          const hay = !needle || (card.getAttribute('data-find') || '').includes(needle);
+          card.style.display = hay ? '' : 'none';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
+

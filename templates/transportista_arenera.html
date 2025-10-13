@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>{{ assignment.arenera.username }} · Cargar viaje</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
+      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; -webkit-text-size-adjust:100%; }
+    .wrap{ max-width:760px; margin:0 auto; padding:16px 12px 80px; }
+
+    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .hello{ display:flex; flex-direction:column; }
+    .hello h1{ margin:0; font-size:18px; }
+    .hello .sub{ color:var(--muted); font-size:12px; }
+    .btn-sm{ padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--brand-2); text-decoration:none; font-weight:600; }
+
+    .card{ background:var(--card); border-radius:var(--radius);
+      border:1px solid var(--ring); box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04);
+      margin-top:12px; padding:12px; }
+    .sec-h{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+    .sec-h h2{ margin:0; font-size:16px; }
+    .sub{ color:var(--muted); font-size:12px; }
+
+    .bar{ height:8px; width:100%; background:#eef2ff; border:1px solid var(--ring); border-radius:8px; overflow:hidden; }
+    .bar > span{ display:block; height:100%; background:linear-gradient(90deg, var(--brand-2), #7aa7ff); width:0%; }
+
+    /* Form */
+    label{ font-size:12px; color:var(--muted); display:block; margin:8px 2px 6px; }
+    .in{ width:100%; min-height:44px; padding:10px 12px; border-radius:12px; border:1px solid var(--ring); background:#fff; color:var(--ink); }
+    .in:focus{ outline:none; border-color:#b5c8ff; box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+    .row{ display:grid; grid-template-columns:1fr; gap:10px; }
+    @media (min-width:560px){ .row.two{ grid-template-columns:1fr 1fr; } }
+    .seg{ display:flex; gap:8px; }
+    .seg button{
+      flex:1; min-height:44px; border:1px solid var(--ring); background:#fff; color:var(--ink);
+      border-radius:12px; font-weight:700; cursor:pointer;
+    }
+    .seg button.active{ border-color:var(--brand-2); box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+
+    .btn{ width:100%; min-height:46px; padding:12px; border-radius:12px; border:1px solid var(--brand-2);
+      background:var(--brand-2); color:#fff; font-weight:800; }
+    .btn[disabled]{ opacity:.5; pointer-events:none; }
+
+    /* Lista de viajes */
+    .list{ display:flex; flex-direction:column; gap:8px; }
+    .trip{ border:1px solid var(--ring); border-radius:12px; background:#fff; padding:10px; }
+    .rowflex{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .t-title{ font-weight:700; }
+    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
+    .pill.ok{ background:#e9f9f2; color:#0d7a5a; border:1px solid #cfeee1; }
+    .pill.warn{ background:#fff3d6; color:#8a5a07; border:1px solid #ffe7a3; }
+    .pill.bad{ background:#ffe4e4; color:#8a1a1a; border:1px solid #f7c2c2; }
+    .meta{ color:var(--muted); font-size:12px; margin-top:4px; }
+    .icon-btn{ border:1px solid var(--ring); background:#fff; color:#b91c1c; border-radius:10px; padding:6px 10px; font-weight:700; cursor:pointer; }
+    .icon-btn:hover{ background:#fff5f5; }
+
+    /* navbar inferior */
+    .nav{ position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring);
+      display:flex; justify-content:space-around; padding:8px 10px; z-index:10; }
+    .nav a{ flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700; padding:10px 8px; border-radius:10px; }
+    .nav a.active{ background:#eef2ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Header -->
+    <div class="top">
+      <div class="hello">
+        <h1>{{ assignment.arenera.username }}</h1>
+        <div class="sub">Fecha: {{ date.strftime('%d/%m/%Y') }}</div>
+      </div>
+      <a class="btn-sm" href="{{ url_for('transportista_panel') }}">Volver</a>
+    </div>
+
+    <!-- Cupo -->
+    {% set used = used or 0 %}
+    {% set lim  = limit or 0 %}
+    {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
+    <div class="card">
+      <div class="sec-h">
+        <h2>Cupo de hoy</h2>
+        <div class="sub">{{ used }} / {{ lim }} usados</div>
+      </div>
+      <div class="bar"><span style="width:{{ pct }}%"></span></div>
+    </div>
+
+    <!-- Formulario -->
+    <div class="card">
+      <div class="sec-h"><h2>Cargar viaje</h2></div>
+      <form method="post" action="">
+        <div class="row">
+          <div>
+            <label>Nombre y apellido del chofer</label>
+            <input class="in" type="text" name="nombre_apellido" placeholder="Juan Pérez" required>
+          </div>
+          <div>
+            <label>DNI</label>
+            <input class="in" type="text" name="dni" inputmode="numeric" pattern="[0-9]*" placeholder="44554990" required>
+          </div>
+        </div>
+
+        <div class="row two">
+          <div>
+            <label>Género</label>
+            <div class="seg" data-name="gender">
+              <button type="button" data-val="M" class="active">M</button>
+              <button type="button" data-val="F">F</button>
+            </div>
+            <input type="hidden" name="gender" value="M">
+          </div>
+          <div>
+            <label>Tipo</label>
+            <select class="in" name="tipo" required>
+              <option value="">Tipo…</option>
+              <option value="Batea">Batea</option>
+              <option value="Bivuelco">Bivuelco</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row two">
+          <div>
+            <label>Patente tractor</label>
+            <input class="in pat" type="text" name="patente_tractor" placeholder="AA123BB" required>
+          </div>
+          <div>
+            <label>Patente batea</label>
+            <input class="in pat" type="text" name="patente_batea" placeholder="AB123CD" required>
+          </div>
+        </div>
+
+        <div style="margin-top:10px;">
+          <button class="btn" type="submit" {{ 'disabled' if lim==0 or used>=lim else '' }}>
+            {{ 'Sin cupo' if lim==0 or used>=lim else 'Agregar envío' }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Mis viajes de hoy -->
+    <div class="card">
+      <div class="sec-h"><h2>Mis viajes de hoy</h2></div>
+      {% if shipments and shipments|length %}
+        <div class="list">
+          {% for s in shipments %}
+          <div class="trip">
+            <div class="rowflex">
+              <div class="t-title">{{ s.chofer }} · {{ s.dni }}</div>
+              <div class="actions">
+                {% if s.status == 'Llego' %}
+                  <span class="pill ok">Llegó</span>
+                {% elif s.status == 'En viaje' %}
+                  <span class="pill warn">En viaje</span>
+                  <form method="post" action="" onsubmit="return confirm('¿Eliminar este viaje?');" style="display:inline;">
+                    <input type="hidden" name="delete_id" value="{{ s.id }}">
+                    <button class="icon-btn" type="submit" title="Eliminar">✕</button>
+                  </form>
+                {% else %}
+                  <span class="pill bad">Cancelado</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="meta">
+              {{ s.tipo }} · Tractor: {{ s.tractor }} · Batea: {{ s.trailer }}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="sub">Aún no cargaste viajes hoy.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Navbar inferior -->
+  <nav class="nav">
+    <a href="{{ url_for('transportista_panel') }}">Inicio</a>
+    <a href="{{ url_for('transportista_quotas') }}">Cuotas</a>
+  </nav>
+
+  <script>
+    // Segmented control (género)
+    document.querySelectorAll('.seg').forEach(seg=>{
+      const name = seg.getAttribute('data-name');
+      const hidden = seg.parentElement.querySelector('input[type="hidden"][name="'+name+'"]');
+      seg.addEventListener('click', e=>{
+        if(e.target.tagName !== 'BUTTON') return;
+        seg.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===e.target));
+        hidden.value = e.target.getAttribute('data-val');
+      });
+    });
+
+    // Patentes: mayúsculas, sin espacios
+    document.querySelectorAll('.pat').forEach(inp=>{
+      inp.addEventListener('input', ()=>{ inp.value = (inp.value || '').toUpperCase().replace(/\s+/g,''); });
+    });
+  </script>
+</body>
+</html>
