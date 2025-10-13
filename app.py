@@ -427,6 +427,8 @@ def create_user():
         pass
 
     flash("Usuario creado", "success")
+    if tipo == "transportista":
+        return redirect(url_for("admin_panel"))
     return redirect(url_for("admin_panel"))
 
 @app.route("/admin/delete_user/<int:user_id>")
