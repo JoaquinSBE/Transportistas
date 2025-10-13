@@ -13,3 +13,5 @@ venv/
 Data/*.log
 camiones.db
 *.sqlite3
+
+# logearse: gh auth login
