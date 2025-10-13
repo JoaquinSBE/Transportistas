@@ -28,19 +28,74 @@ ADMIN_USER      = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS      = os.getenv("ADMIN_PASS", "admin123")
 
 # ----------------------------
+# Configuración por .env
+# ----------------------------
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except Exception:
+    pass
+
+# Variables de entorno (soporta FLASK_SECRET_KEY o SECRET_KEY)
+SECRET_KEY   = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY", "clave-super-secreta-para-dev")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///camiones.db")  # Render setea esta var
+TPL_EXT      = os.getenv("TPL_EXT", ".html")
+PASSWORD_LOG = os.getenv("PASSWORD_LOG", os.path.join("Data", "passwords.log"))
+ADMIN_USER   = os.getenv("ADMIN_USER", "admin")
+ADMIN_PASS   = os.getenv("ADMIN_PASS", "admin123")
+
+# Schema (para aislar tablas en la misma base)
+DB_SCHEMA    = os.getenv("DB_SCHEMA", "transportistas")
+
+# ----------------------------
 # Inicialización Flask / DB
 # ----------------------------
 app = Flask(__name__, template_folder="templates")
 app.secret_key = SECRET_KEY
 
-# Compatibilidad: si ponen postgres:// lo paso a postgresql+psycopg2://
+# Compatibilidad: postgres:// -> postgresql:// (SQLAlchemy)
 if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+# Pool “amigable” con Render (free/low)
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_size": 5,
+    "max_overflow": 5,
+    "pool_pre_ping": True,
+    "pool_recycle": 1800,
+}
+
 db = SQLAlchemy(app)
+
+# --- Search Path al schema elegido (evita mezclar con otras apps) ---
+from sqlalchemy import event, text
+from sqlalchemy.engine import Engine
+
+@event.listens_for(Engine, "connect")
+def _set_search_path(dbapi_connection, connection_record):
+    try:
+        with dbapi_connection.cursor() as cur:
+            cur.execute(f"SET search_path TO {DB_SCHEMA}")
+    except Exception:
+        # Si la base es SQLite o falla el comando, lo ignoramos sin romper el arranque
+        pass
+
+# --- (Primera vez) crear schema y tablas ---
+# Podés controlar esto con INIT_DB_ON_BOOT=0 si no querés que corra en cada deploy
+if os.getenv("INIT_DB_ON_BOOT", "1") == "1":
+    with app.app_context():
+        # Crear schema si no existe (solo en Postgres)
+        try:
+            if DB_SCHEMA and DB_SCHEMA != "public":
+                db.session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}"))
+                db.session.commit()
+        except Exception:
+            pass
+        # Crear tablas de tu app
+        db.create_all()
 
 # Aseguro carpeta para el log de contraseñas
 os.makedirs(os.path.dirname(PASSWORD_LOG), exist_ok=True)
