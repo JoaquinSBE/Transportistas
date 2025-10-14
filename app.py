@@ -136,7 +136,7 @@ class User(db.Model):
     __tablename__ = "user"
     id             = db.Column(db.Integer, primary_key=True)
     username       = db.Column(db.String(50), unique=True, nullable=False, index=True)
-    password_hash  = db.Column(db.String(128), nullable=False)
+    password_hash  = db.Column(db.String(512), nullable=False)
     tipo           = db.Column(db.String(20), nullable=False)  # 'admin' | 'transportista' | 'arenera'
 
     shipments_sent = db.relationship(
@@ -199,8 +199,17 @@ with app.app_context():
             db.session.commit()
         except Exception:
             db.session.rollback()
+
     # crea tablas
     db.create_all()
+
+    # ampliar columna de hash si quedó corta de una versión anterior
+    try:
+        db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(512)'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
     # asegura admin por defecto
     admin = db.session.query(User).filter(func.lower(User.username) == norm_username(ADMIN_USER)).first()
     if not admin:
