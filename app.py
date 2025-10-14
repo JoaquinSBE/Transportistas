@@ -51,30 +51,55 @@ if DATABASE_URL.startswith("postgresql+psycopg://"):
 # ----------------------------
 # Inicialización Flask / DB
 # ----------------------------
+
 app = Flask(__name__, template_folder="templates")
-app.secret_key = SECRET_KEY
 
-# Compatibilidad: postgres:// -> postgresql:// (SQLAlchemy)
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://","postgresql+psycopg://", 1)
+# Secret
+app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY", "clave-super-secreta-para-dev")
 
-# Log “seguro” del DSN (sin user:pass) para validar en Render
-_safe = DATABASE_URL
-if "@" in _safe:
-    _safe = _safe.split("@", 1)[-1]
-app.logger.info(f"DB URI efectiva → postgresql://***:***@{_safe}" if "postgresql+psycopg" in DATABASE_URL else f"DB URI efectiva → {_safe}")
+# Ambiente
+IS_RENDER = bool(os.getenv("RENDER") or os.getenv("RENDER_EXTERNAL_URL"))
+DB_SCHEMA = os.getenv("DB_SCHEMA", "transportistas")
 
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# DATABASE_URL: obligatorio en Render, fallback a SQLite solo local
+db_url = (os.getenv("DATABASE_URL") or "").strip()
+if not db_url:
+    if IS_RENDER:
+        raise RuntimeError("DATABASE_URL no está definido en producción")
+    db_url = "sqlite:///instance/app.db"
 
-# Pool “amigable” con Render (free/low)
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 5,
-    "max_overflow": 5,
-    "pool_pre_ping": True,
-    "pool_recycle": 1800,
-}
+# Normalización a Psycopg3
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
+elif db_url.startswith("postgresql://"):
+    db_url = "postgresql+psycopg://" + db_url.split("://", 1)[1]
+
+# search_path por URL (schema primero, luego public)
+if db_url.startswith("postgresql+psycopg://"):
+    sep = '&' if '?' in db_url else '?'
+    db_url = f"{db_url}{sep}options=-csearch_path%3D{DB_SCHEMA},public"
+
+# Config de SQLAlchemy antes de instanciar la extensión
+app.config.update(
+    SQLALCHEMY_DATABASE_URI=db_url,
+    SQLALCHEMY_TRACK_MODIFICATIONS=False,
+    SQLALCHEMY_ENGINE_OPTIONS={
+        "pool_size": 5,
+        "max_overflow": 5,
+        "pool_pre_ping": True,
+        "pool_recycle": 1800,
+    },
+)
 
 db = SQLAlchemy(app)
+
+# Log de verificación del DSN (sin credenciales)
+_safe = db_url.split("@", 1)[-1] if "@" in db_url else db_url
+app.logger.info(
+    "DB URI efectiva → postgresql://***:***@" + _safe
+    if "postgresql+psycopg" in db_url else
+    "DB URI efectiva → " + _safe
+)
 
 # --- (Primera vez) crear schema y tablas ---
 # Podés controlar esto con INIT_DB_ON_BOOT=0 si no querés que corra en cada deploy
