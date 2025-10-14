@@ -3,7 +3,7 @@ import os
 import io, csv
 from datetime import datetime, date, timedelta
 from functools import wraps
-from sqlalchemy import func, case, cast, Integer, text
+from sqlalchemy import func, case, text
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -17,33 +17,25 @@ try:
 except Exception:
     pass
 
+# Variables de ambiente
 SECRET_KEY   = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY", "clave-super-secreta-para-dev")
 TPL_EXT      = os.getenv("TPL_EXT", ".html")
 PASSWORD_LOG = os.getenv("PASSWORD_LOG", os.path.join("Data", "passwords.log"))
 ADMIN_USER   = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS   = os.getenv("ADMIN_PASS", "admin123")
+DB_SCHEMA    = os.getenv("DB_SCHEMA", "transportistas")
 
-# Detección simple de Render
-IS_RENDER = bool(os.getenv("RENDER") or os.getenv("RENDER_EXTERNAL_URL"))
-
-# Esquema
-DB_SCHEMA  = os.getenv("DB_SCHEMA", "transportistas")
-
-# DATABASE_URL: en Render es obligatorio, en local podés caer a SQLite
+# Solo PostgreSQL (sin fallback)
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
 if not DATABASE_URL:
-    if IS_RENDER:
-        raise RuntimeError("DATABASE_URL no está definido en producción")
-    # Sólo local
-    DATABASE_URL = "sqlite:///instance/app.db"
+    raise RuntimeError("DATABASE_URL no está definido. La app requiere PostgreSQL.")
 
-# Normalización a psycopg3
+# Normalización a psycopg3 y search_path
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://","postgresql+psycopg://", 1)
 elif DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL.split("://", 1)[1]
 
-# search_path por URL (transportistas,public) — evita usar event connect
 if DATABASE_URL.startswith("postgresql+psycopg://"):
     sep = '&' if '?' in DATABASE_URL else '?'
     DATABASE_URL = f"{DATABASE_URL}{sep}options=-csearch_path%3D{DB_SCHEMA},public"
@@ -51,37 +43,11 @@ if DATABASE_URL.startswith("postgresql+psycopg://"):
 # ----------------------------
 # Inicialización Flask / DB
 # ----------------------------
-
 app = Flask(__name__, template_folder="templates")
+app.secret_key = SECRET_KEY
 
-# Secret
-app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY", "clave-super-secreta-para-dev")
-
-# Ambiente
-IS_RENDER = bool(os.getenv("RENDER") or os.getenv("RENDER_EXTERNAL_URL"))
-DB_SCHEMA = os.getenv("DB_SCHEMA", "transportistas")
-
-# DATABASE_URL: obligatorio en Render, fallback a SQLite solo local
-db_url = (os.getenv("DATABASE_URL") or "").strip()
-if not db_url:
-    if IS_RENDER:
-        raise RuntimeError("DATABASE_URL no está definido en producción")
-    db_url = "sqlite:///instance/app.db"
-
-# Normalización a Psycopg3
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
-elif db_url.startswith("postgresql://"):
-    db_url = "postgresql+psycopg://" + db_url.split("://", 1)[1]
-
-# search_path por URL (schema primero, luego public)
-if db_url.startswith("postgresql+psycopg://"):
-    sep = '&' if '?' in db_url else '?'
-    db_url = f"{db_url}{sep}options=-csearch_path%3D{DB_SCHEMA},public"
-
-# Config de SQLAlchemy antes de instanciar la extensión
 app.config.update(
-    SQLALCHEMY_DATABASE_URI=db_url,
+    SQLALCHEMY_DATABASE_URI=DATABASE_URL,
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SQLALCHEMY_ENGINE_OPTIONS={
         "pool_size": 5,
@@ -93,46 +59,25 @@ app.config.update(
 
 db = SQLAlchemy(app)
 
-# Log de verificación del DSN (sin credenciales)
-_safe = db_url.split("@", 1)[-1] if "@" in db_url else db_url
+# Log “seguro” del DSN (sin credenciales)
+_safe = DATABASE_URL.split("@", 1)[-1] if "@" in DATABASE_URL else DATABASE_URL
 app.logger.info(
     "DB URI efectiva → postgresql://***:***@" + _safe
-    if "postgresql+psycopg" in db_url else
+    if "postgresql+psycopg" in DATABASE_URL else
     "DB URI efectiva → " + _safe
 )
-
-# --- (Primera vez) crear schema y tablas ---
-# Podés controlar esto con INIT_DB_ON_BOOT=0 si no querés que corra en cada deploy
-if os.getenv("INIT_DB_ON_BOOT", "1") == "1":
-    with app.app_context():
-        # Crear schema si no existe (solo en Postgres)
-        try:
-            if DB_SCHEMA and DB_SCHEMA != "public":
-                db.session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}"))
-                db.session.commit()
-        except Exception:
-            pass
-        # Crear tablas de tu app
-        db.create_all()
 
 # Aseguro carpeta para el log de contraseñas
 os.makedirs(os.path.dirname(PASSWORD_LOG), exist_ok=True)
 
-# Helper para resolver nombre de template con extensión configurable
+# Helper de templates con extensión configurable
 def tpl(name: str) -> str:
     return f"{name}{TPL_EXT}"
 
 def _resolve_range(data: dict):
-    """
-    Devuelve (dfrom, dto) como date, ambos inclusive.
-    Soporta:
-      - data['range'] in {'today','week','month'}
-      - data['from'] y data['to'] ('YYYY-MM-DD')
-    """
     rng = (data.get('range') or '').strip().lower()
     dfrom = data.get('from')
     dto   = data.get('to')
-
     if dfrom and dto:
         try:
             start = date.fromisoformat(dfrom)
@@ -142,24 +87,18 @@ def _resolve_range(data: dict):
             return start, end
         except Exception:
             pass
-
     hoy = date.today()
-    if rng == 'today' or rng == '':
+    if rng in ('', 'today'):
         return hoy, hoy
     if rng == 'week':
-        # semana móvil: [hoy-6, hoy]
         return hoy - timedelta(days=6), hoy
     if rng == 'month':
-        # mes calendario actual
         start = hoy.replace(day=1)
-        # fin de mes
         if start.month == 12:
             end = start.replace(year=start.year + 1, month=1, day=1) - timedelta(days=1)
         else:
             end = start.replace(month=start.month + 1, day=1) - timedelta(days=1)
         return start, end
-
-    # fallback
     return hoy, hoy
 
 def norm_username(s: str) -> str:
@@ -169,31 +108,25 @@ def calcular_cuil(dni_str: str, gender: str | None) -> str:
     digits = ''.join(ch for ch in (dni_str or '') if ch.isdigit()).zfill(8)
     if len(digits) != 8:
         return ""
-
     g = (gender or "").upper()
     pref = 20 if g == "M" else (27 if g == "F" else 23)
     weights = [5,4,3,2,7,6,5,4,3,2]
-
     def calc_dv(prefijo: int):
         base = f"{prefijo:02d}{digits}"
         total = sum(int(d)*w for d, w in zip(base, weights))
         dv = 11 - (total % 11)
         if dv == 11: return 0
-        if dv == 10: return None  # “resto 1” → caso especial
+        if dv == 10: return None
         return dv
-
     dv = calc_dv(pref)
     if dv is None:
-        # Regla conocida: cambiar a 23 y recalcular
         pref = 23
         dv = calc_dv(pref)
         if dv is None:
-            # casos muy raros
             pref = 24
             dv = calc_dv(pref)
             if dv is None:
                 return ""
-
     return f"{pref:02d}{digits}{dv}"
 
 # ----------------------------
@@ -206,7 +139,6 @@ class User(db.Model):
     password_hash  = db.Column(db.String(128), nullable=False)
     tipo           = db.Column(db.String(20), nullable=False)  # 'admin' | 'transportista' | 'arenera'
 
-    # Relación de envíos emitidos (como transportista)
     shipments_sent = db.relationship(
         "Shipment",
         foreign_keys="Shipment.transportista_id",
@@ -214,8 +146,6 @@ class User(db.Model):
         cascade="all, delete-orphan",
         lazy="dynamic",
     )
-
-    # Relación de envíos recibidos (como arenera)
     shipments_received = db.relationship(
         "Shipment",
         foreign_keys="Shipment.arenera_id",
@@ -223,8 +153,6 @@ class User(db.Model):
         cascade="all, delete-orphan",
         lazy="dynamic",
     )
-
-    # Relación de cuotas (como transportista)
     quotas = db.relationship(
         "Quota",
         foreign_keys="Quota.transportista_id",
@@ -232,7 +160,6 @@ class User(db.Model):
         cascade="all, delete-orphan",
         lazy="dynamic",
     )
-
 
 class Shipment(db.Model):
     __tablename__ = "shipment"
@@ -248,7 +175,6 @@ class Shipment(db.Model):
     trailer          = db.Column(db.String(20), nullable=False)
     status           = db.Column(db.String(20), nullable=False, default="En viaje", index=True)
 
-
 class Quota(db.Model):
     __tablename__ = "quota"
     id               = db.Column(db.Integer, primary_key=True)
@@ -257,13 +183,34 @@ class Quota(db.Model):
     date             = db.Column(db.Date, nullable=False, index=True)
     limit            = db.Column(db.Integer, nullable=False, default=0)
     used             = db.Column(db.Integer, nullable=False, default=0)
-
-    # Acceso directo a la arenera (objeto User de tipo 'arenera')
     arenera          = db.relationship("User", foreign_keys=[arenera_id])
-
     __table_args__   = (
         db.UniqueConstraint("transportista_id", "arenera_id", "date", name="uix_quota"),
     )
+
+# ----------------------------
+# Bootstrapping DB (schema + tablas + admin)
+# ----------------------------
+with app.app_context():
+    # crea schema si no existe
+    if DB_SCHEMA and DB_SCHEMA != "public":
+        try:
+            db.session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    # crea tablas
+    db.create_all()
+    # asegura admin por defecto
+    admin = db.session.query(User).filter(func.lower(User.username) == norm_username(ADMIN_USER)).first()
+    if not admin:
+        admin = User(
+            username=norm_username(ADMIN_USER),
+            password_hash=generate_password_hash(ADMIN_PASS),
+            tipo="admin",
+        )
+        db.session.add(admin)
+        db.session.commit()
 
 # ----------------------------
 # Decoradores de auth
@@ -276,7 +223,6 @@ def login_required(f):
         return f(*args, **kwargs)
     return wrapped
 
-
 def role_required(role):
     def deco(f):
         @wraps(f)
@@ -286,7 +232,6 @@ def role_required(role):
             return f(*args, **kwargs)
         return wrapped
     return deco
-
 
 # ----------------------------
 # LOGIN / LOGOUT
@@ -299,9 +244,9 @@ def login_page():
 def login():
     u = norm_username(request.form.get("usuario"))
     p = (request.form.get("clave") or "").strip()
-
     user = db.session.query(User).filter(func.lower(User.username) == u).first()
     if user and check_password_hash(user.password_hash, p):
+        session.clear()
         session["user_id"] = user.id
         session["tipo"]    = user.tipo
         if user.tipo == "admin":
@@ -309,7 +254,6 @@ def login():
         if user.tipo == "transportista":
             return redirect(url_for("transportista_panel"))
         return redirect(url_for("arenera_panel"))
-
     flash("Usuario o clave incorrectos", "error")
     return redirect(url_for("login_page"))
 
@@ -317,7 +261,6 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login_page"))
-
 
 # ----------------------------
 # CAMBIO DE CLAVE
@@ -332,7 +275,6 @@ def change_password():
         if check_password_hash(user.password_hash, actual):
             user.password_hash = generate_password_hash(nueva)
             db.session.commit()
-            # Log simple de cambios de contraseña (para auditoría interna)
             try:
                 with open(PASSWORD_LOG, "a", encoding="utf-8") as f:
                     f.write(f"{datetime.now().isoformat()} | {user.username} | {nueva}\n")
@@ -343,42 +285,34 @@ def change_password():
         flash("Contraseña actual no coincide", "error")
     return render_template(tpl("change_password"), user=user)
 
-
 # ----------------------------
 # PANEL ADMIN
 # ----------------------------
-
 @app.route("/admin")
 @login_required
 @role_required("admin")
 def admin_panel():
-    # Semana calendario: lunes-domingo
     today = date.today()
     week_start = today
     week_end   = week_start + timedelta(days=6)
 
-    # Transportistas: envíos históricos + cupo disponible esta semana
     t_list = []
     for t in User.query.filter_by(tipo="transportista").all():
         total_sent = Shipment.query.filter_by(transportista_id=t.id).count()
-
         qs = Quota.query.filter(
             Quota.transportista_id == t.id,
             Quota.date >= week_start,
             Quota.date <= week_end
         ).all()
-
         assigned   = sum(q.limit for q in qs)
         available  = sum(max(q.limit - q.used, 0) for q in qs)
-
         t_list.append({
             "t": t,
             "sent": total_sent,
-            "quota": available,     # lo que ve la tabla "Cupo semana"
-            "quota_total": assigned # por si querés mostrar asignado/disp.
+            "quota": available,
+            "quota_total": assigned
         })
 
-    # Areneras: envíos históricos recibidos
     a_list = []
     for a in User.query.filter_by(tipo="arenera").all():
         total_ship = Shipment.query.filter_by(arenera_id=a.id).count()
@@ -404,7 +338,6 @@ def create_user():
         flash("Datos inválidos", "error")
         return redirect(url_for("admin_panel"))
 
-    # Duplicado case-insensitive
     exists = db.session.query(User).filter(func.lower(User.username) == uname).first()
     if exists:
         flash("Ese usuario ya existe.", "error")
@@ -421,8 +354,7 @@ def create_user():
         pass
 
     flash("Usuario creado", "success")
-    if tipo == "transportist":
-        return redirect(url_for("admin_panel"))
+    # SIEMPRE quedar en el panel principal
     return redirect(url_for("admin_panel"))
 
 @app.route("/admin/delete_user/<int:user_id>")
@@ -435,7 +367,7 @@ def delete_user(user_id):
     flash("Usuario eliminado", "success")
     return redirect(url_for("admin_panel"))
 
-# --- Cuotas (admin): vista de 7 días desde una fecha de inicio, guardado masivo ---
+# --- Cuotas (admin)
 @app.route("/admin/quotas/<int:transportista_id>", methods=["GET", "POST"])
 @login_required
 @role_required("admin")
@@ -443,7 +375,6 @@ def manage_quotas(transportista_id):
     t = User.query.get_or_404(transportista_id)
     areneras = User.query.filter_by(tipo="arenera").order_by(User.username.asc()).all()
 
-    # fecha de inicio (GET ?start=YYYY-MM-DD) o (POST hidden start_date)
     if request.method == "POST":
         start_str = (request.form.get("start_date") or "").strip()
     else:
@@ -457,7 +388,6 @@ def manage_quotas(transportista_id):
     week_dates = [start_date + timedelta(days=i) for i in range(7)]
 
     if request.method == "POST":
-        # Guardado masivo: inputs q_{arenera_id}_{YYYY-MM-DD}
         total_updates, total_deletes, total_inserts = 0, 0, 0
 
         for a in areneras:
@@ -465,14 +395,13 @@ def manage_quotas(transportista_id):
                 key = f"q_{a.id}_{d.isoformat()}"
                 raw = request.form.get(key, "").strip()
 
-                # leer existente
                 q = Quota.query.filter_by(
                     transportista_id=transportista_id,
                     arenera_id=a.id,
                     date=d
                 ).first()
 
-                if raw == "":  # vacío => borrar si existía
+                if raw == "":
                     if q:
                         db.session.delete(q)
                         total_deletes += 1
@@ -480,10 +409,8 @@ def manage_quotas(transportista_id):
 
                 try:
                     v = int(raw)
-                    if v < 0:
-                        v = 0
+                    if v < 0: v = 0
                 except ValueError:
-                    # valor inválido => ignorar
                     continue
 
                 if v == 0:
@@ -504,7 +431,6 @@ def manage_quotas(transportista_id):
                     total_inserts += 1
                 else:
                     q.limit = v
-                    # no bajar used por debajo de 0 ni por encima del nuevo límite
                     q.used = min(max(q.used, 0), v)
                     total_updates += 1
 
@@ -512,7 +438,6 @@ def manage_quotas(transportista_id):
         flash(f"Cuotas guardadas · {total_inserts} nuevas, {total_updates} actualizadas, {total_deletes} eliminadas", "success")
         return redirect(url_for("manage_quotas", transportista_id=transportista_id, start=start_date.isoformat()))
 
-    # --- Carga de datos para render ---
     existing = (
         Quota.query
         .filter(
@@ -522,7 +447,6 @@ def manage_quotas(transportista_id):
     )
     quota_map = {(q.arenera_id, q.date): q for q in existing}
 
-    # usados por arenera/día (viajes ya registrados)
     from sqlalchemy import func
     used_rows = (
         db.session.query(
@@ -545,8 +469,8 @@ def manage_quotas(transportista_id):
         transportista=t,
         areneras=areneras,
         week_dates=week_dates,
-        quota_map=quota_map,   # dict[(arenera_id, date)] -> Quota
-        used_map=used_map,     # dict[(arenera_id, date)] -> usados (int)
+        quota_map=quota_map,
+        used_map=used_map,
         start_date=start_date
     )
 
@@ -564,7 +488,6 @@ def todos_camiones():
         q = q.filter_by(status=status)
     shipments = q.all()
 
-    # Filtros por nombre (manual)
     if transportista:
         shipments = [s for s in shipments if transportista in s.transportista.username.lower()]
     if arenera:
@@ -578,11 +501,9 @@ def todos_camiones():
         arenera=arenera,
     )
 
-#----------------------------
+# ----------------------------
 # DASHBOARD ADMIN - API de datos
-#----------------------------
-
-
+# ----------------------------
 @app.post("/admin/dashboard_data")
 @login_required
 @role_required("admin")
@@ -590,13 +511,6 @@ def admin_dashboard_data():
     data = request.get_json(silent=True) or {}
     dfrom, dto = _resolve_range(data)
 
-    # filtro base
-    base = db.session.query(Shipment).filter(
-        Shipment.date >= dfrom,
-        Shipment.date <= dto
-    )
-
-    # ---- KPIs totales por estado ----
     def _count_status(st):
         return db.session.query(func.count(Shipment.id)).filter(
             Shipment.date >= dfrom, Shipment.date <= dto,
@@ -619,8 +533,6 @@ def admin_dashboard_data():
         "cancelados": cancelados,
     }
 
-    # ---- Agregado por ARENERA ----
-    # username de la arenera + conteos por estado
     sub_arenera = (
         db.session.query(
             User.username.label("arenera"),
@@ -646,7 +558,6 @@ def admin_dashboard_data():
         for r in sub_arenera
     ]
 
-    # ---- Agregado por TRANSPORTISTA ----
     sub_trans = (
         db.session.query(
             User.username.label("transportista"),
@@ -672,15 +583,8 @@ def admin_dashboard_data():
         for r in sub_trans
     ]
 
-    # ---- Timeline diaria (series por estado) ----
-    # armamos un diccionario por fecha para cada estado
     day = dfrom
-    labels = []
-    serie_lleg = []
-    serie_viaje = []
-    serie_canc = []
-
-    # pre-agrupado por fecha y estado
+    labels, serie_lleg, serie_viaje, serie_canc = [], [], [], []
     rows = (
         db.session.query(
             Shipment.date.label("d"),
@@ -691,9 +595,7 @@ def admin_dashboard_data():
         .group_by(Shipment.date, Shipment.status)
         .all()
     )
-    # map {(date, status): count}
     m = {(r.d, r.s): int(r.c or 0) for r in rows}
-
     while day <= dto:
         labels.append(day.isoformat())
         serie_lleg.append(m.get((day, "Llego"), 0))
@@ -719,7 +621,7 @@ def admin_dashboard_data():
 @login_required
 @role_required("admin")
 def admin_dashboard():
-    return render_template("admin_dashboard.html")  # nuevo template
+    return render_template("admin_dashboard.html")
 
 # ----------------------------
 # PANEL TRANSPORTISTA
@@ -731,11 +633,9 @@ def transportista_panel():
     u   = User.query.get(session["user_id"])
     hoy = date.today()
 
-    # Semana actual: lunes (inclusive) -> próximo lunes (exclusivo)
-    week_start = hoy - timedelta(days=hoy.weekday())       # lunes
+    week_start = hoy - timedelta(days=hoy.weekday())
     next_monday = week_start + timedelta(days=7)
 
-    # KPI
     en_viaje_total = (Shipment.query
         .filter_by(transportista_id=u.id, status="En viaje")
         .count())
@@ -761,16 +661,14 @@ def transportista_panel():
         "llegados":   llegados_semana,
         "cancelados": cancelados_semana,
         "week_from":  week_start,
-        "week_to":    next_monday - timedelta(days=1),  # muestra domingo
+        "week_to":    next_monday - timedelta(days=1),
     }
 
-    # LISTADO COMPLETO (histórico)
     envios = (Shipment.query
               .filter_by(transportista_id=u.id)
               .order_by(Shipment.date.desc(), Shipment.id.desc())
               .all())
 
-    # Cupos de hoy (con usados)
     assignments = []
     for q in Quota.query.filter_by(transportista_id=u.id, date=hoy).all():
         if q.arenera:
@@ -814,7 +712,6 @@ def transportista_quotas():
         by_date=by_date,
     )
 
-
 @app.route("/transportista/arenera/<int:arenera_id>", methods=["GET", "POST"])
 @login_required
 @role_required("transportista")
@@ -836,21 +733,18 @@ def transportista_arenera(arenera_id):
     ).all()
 
     if request.method == "POST":
-        # Borrar envío del día
         if "delete_id" in request.form:
             sid = int(request.form["delete_id"])
             s   = Shipment.query.get(sid)
             if s and s.date == dt:
                 db.session.delete(s)
                 db.session.commit()
-            # Recalcula used
             q.used = Shipment.query.filter_by(
                 transportista_id=u.id, arenera_id=arenera_id, date=dt
             ).count()
             db.session.commit()
             return redirect(url_for("transportista_arenera", arenera_id=arenera_id, date=dt.isoformat()))
 
-        # Crear nuevo envío si hay cupo
         if q.used < q.limit:
             new = Shipment(
                 transportista_id=u.id,
@@ -866,7 +760,6 @@ def transportista_arenera(arenera_id):
             )
             db.session.add(new)
             db.session.commit()
-            # Recalcular usados
             q.used = Shipment.query.filter_by(
                 transportista_id=u.id, arenera_id=arenera_id, date=dt
             ).count()
@@ -892,17 +785,11 @@ def transportista_arenera(arenera_id):
 @role_required("transportista")
 def delete_own_shipment(ship_id):
     s = Shipment.query.get_or_404(ship_id)
-
-    # Sólo tuyo
     if s.transportista_id != session.get("user_id"):
         abort(403)
-
-    # Borra sólo si está "En viaje"
     if s.status != "En viaje":
         flash("Sólo se puede eliminar cuando el viaje está 'En viaje'.", "error")
         return redirect(url_for("transportista_panel"))
-
-    # Ajustar cupo usado del día/arenera (sin bajar de 0)
     q = Quota.query.filter_by(
         transportista_id=s.transportista_id,
         arenera_id=s.arenera_id,
@@ -910,7 +797,6 @@ def delete_own_shipment(ship_id):
     ).first()
     if q and q.used > 0:
         q.used -= 1
-
     db.session.delete(s)
     db.session.commit()
     flash("Viaje eliminado.", "success")
@@ -943,17 +829,14 @@ def arenera_panel():
 def arenera_history():
     u = User.query.get(session["user_id"])
 
-    # Parámetros de filtro
     start_str = (request.args.get("start_date") or "").strip()
     end_str   = (request.args.get("end_date") or "").strip()
-    status    = (request.args.get("status") or "").strip()       # "", "En viaje", "Llego", "Cancelado"
+    status    = (request.args.get("status") or "").strip()
     search    = (request.args.get("search") or "").strip().lower()
 
-    # Rango por defecto: TODO el historial de esa arenera
     min_date = db.session.query(func.min(Shipment.date)).filter_by(arenera_id=u.id).scalar() or date.today()
     max_date = db.session.query(func.max(Shipment.date)).filter_by(arenera_id=u.id).scalar() or date.today()
 
-    # Parseo robusto de fechas
     try:
         start_date = date.fromisoformat(start_str) if start_str else min_date
     except ValueError:
@@ -965,7 +848,6 @@ def arenera_history():
     if end_date < start_date:
         start_date, end_date = end_date, start_date
 
-    # Traigo TODO el rango (sin status) y aplico búsqueda en Python (evita joins)
     base_rows = (Shipment.query
                  .filter(
                      Shipment.arenera_id == u.id,
@@ -988,7 +870,6 @@ def arenera_history():
             ])
         base_rows = [s for s in base_rows if hit(s)]
 
-    # Contadores por estado (sobre el rango + búsqueda)
     counts = {
         "total":      len(base_rows),
         "en_viaje":   sum(1 for s in base_rows if s.status == "En viaje"),
@@ -996,7 +877,6 @@ def arenera_history():
         "cancelados": sum(1 for s in base_rows if s.status == "Cancelado"),
     }
 
-    # Aplicar filtro de status para el listado (si viene)
     if status:
         rows = [s for s in base_rows if s.status == status]
     else:
@@ -1022,10 +902,6 @@ def arenera_update(shipment_id):
     s.status = "Llego" if st == "Llego" else "Cancelado"
     db.session.commit()
     return redirect(request.referrer or url_for("arenera_panel"))
-
-# imports por si faltan
-import io, csv
-from flask import make_response
 
 @app.get("/arenera/export")
 @login_required
@@ -1057,7 +933,6 @@ def arenera_export():
     sio.write("sep=;\r\n")
     w = csv.writer(sio, delimiter=";", lineterminator="\r\n")
 
-    # ⬇️ agregamos CUIL
     w.writerow(["Fecha", "Transportista", "Chofer", "DNI", "CUIL", "Tractor", "Batea", "Tipo", "Estado"])
     for s in rows:
         cuil = calcular_cuil(getattr(s, "dni", ""), getattr(s, "gender", ""))
@@ -1077,18 +952,16 @@ def arenera_export():
     resp = make_response(csv_text)
     resp.headers["Content-Type"] = "application/vnd.ms-excel; charset=utf-8"
     fname = f"arenera_{u.username}_{start_date.strftime('%Y-%m-%d')}_{end_date.strftime('%Y-%m-%d')}.csv"
-    resp.headers["Content-Disposition"] = f'attachment; filename=\"{fname}\"'
+    resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
     return resp
 
 # ----------------------------
 # LOG DE CONTRASEÑAS (admin)
 # ----------------------------
-
 @app.route("/admin/password_log")
 @login_required
 @role_required("admin")
 def password_log():
-    # Tomar la ÚLTIMA contraseña registrada por usuario desde el archivo de log
     pw_map = {}
     if os.path.exists(PASSWORD_LOG):
         with open(PASSWORD_LOG, encoding="utf-8") as f:
@@ -1104,7 +977,6 @@ def password_log():
                 if (user not in pw_map) or (ts > pw_map[user][1]):
                     pw_map[user] = (pwd, ts)
 
-    # Listar todos los usuarios y pegarles su contraseña actual (si está logueada)
     users = User.query.order_by(User.tipo.asc(), User.username.asc()).all()
     rows = []
     for u in users:
@@ -1122,5 +994,6 @@ def password_log():
 # MAIN
 # ----------------------------
 if __name__ == "__main__":
-    # En dev se queda en 0.0.0.0 y debug True (ajustable por env si querés)
-    app.run(host=os.getenv("FLASK_HOST", "0.0.0.0"), port=int(os.getenv("FLASK_PORT", "5000")), debug=os.getenv("FLASK_DEBUG", "1") == "1")
+    app.run(host=os.getenv("FLASK_HOST", "0.0.0.0"),
+            port=int(os.getenv("FLASK_PORT", "5000")),
+            debug=os.getenv("FLASK_DEBUG", "1") == "1")
