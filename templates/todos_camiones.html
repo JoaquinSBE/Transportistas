@@ -83,7 +83,6 @@
               <option value="" {{ '' == (status or '') and 'selected' or '' }}>Todos</option>
               <option value="En viaje"  {{ (status or '') == 'En viaje'  and 'selected' or '' }}>En viaje</option>
               <option value="Llego"     {{ (status or '') == 'Llego'     and 'selected' or '' }}>Llegó</option>
-              <option value="Cancelado" {{ (status or '') == 'Cancelado' and 'selected' or '' }}>Cancelado</option>
             </select>
           </div>
           <div>
@@ -142,7 +141,7 @@
                   {% elif s.status == 'En viaje' %}
                     <span class="pill warn">En viaje</span>
                   {% else %}
-                    <span class="pill bad">Cancelado</span>
+                    <span class="pill warn"></span>
                   {% endif %}
                 </td>
               </tr>

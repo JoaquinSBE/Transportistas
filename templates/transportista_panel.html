@@ -134,10 +134,6 @@
           <div class="tag">Llegados</div>
           <div class="val">{{ stats.llegados }}</div>
         </div>
-        <div class="kpi bad">
-          <div class="tag">Cancelados</div>
-          <div class="val">{{ stats.cancelados }}</div>
-        </div>
       </div>
       <div class="sub" style="margin-top:6px;">
       Muestra los datos de la Semana: {{ stats.week_from.strftime('%d/%m') }} al {{ stats.week_to.strftime('%d/%m') }}
@@ -199,7 +195,7 @@
                     <button type="submit" class="icon-btn" title="Eliminar">✕</button>
                   </form>
                 {% else %}
-                  <span class="pill bad">Cancelado</span>
+                  <span class="pill warn"></span>
                 {% endif %}
               </div>
             </div>

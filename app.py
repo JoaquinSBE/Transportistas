@@ -7,6 +7,7 @@ from sqlalchemy import func, case, text
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from openpyxl import Workbook
 
 # ----------------------------
 # Configuración por .env
@@ -393,6 +394,7 @@ def delete_user(user_id):
     return redirect(url_for("admin_panel"))
 
 # --- Cuotas (admin)
+# --- Cuotas (admin)
 @app.route("/admin/quotas/<int:transportista_id>", methods=["GET", "POST"])
 @login_required
 @role_required("admin")
@@ -400,6 +402,7 @@ def manage_quotas(transportista_id):
     t = User.query.get_or_404(transportista_id)
     areneras = User.query.filter_by(tipo="arenera").order_by(User.username.asc()).all()
 
+    # leer fecha inicial desde POST o GET
     if request.method == "POST":
         start_str = (request.form.get("start_date") or "").strip()
     else:
@@ -413,56 +416,74 @@ def manage_quotas(transportista_id):
     week_dates = [start_date + timedelta(days=i) for i in range(7)]
 
     if request.method == "POST":
-        total_updates, total_deletes, total_inserts = 0, 0, 0
+        total_inserts = total_updates = total_deletes = 0
 
-        for a in areneras:
-            for d in week_dates:
-                key = f"q_{a.id}_{d.isoformat()}"
-                raw = request.form.get(key, "").strip()
+        try:
+            for a in areneras:
+                for d in week_dates:
+                    key = f"q_{a.id}_{d.isoformat()}"
+                    raw = (request.form.get(key) or "").strip()
 
-                q = Quota.query.filter_by(
-                    transportista_id=transportista_id,
-                    arenera_id=a.id,
-                    date=d
-                ).first()
+                    # Vacío o "0" => borrar (si existe)
+                    if raw == "" or raw == "0":
+                        with db.session.no_autoflush:
+                            q = Quota.query.filter_by(
+                                transportista_id=transportista_id,
+                                arenera_id=a.id,
+                                date=d
+                            ).first()
+                        if q:
+                            db.session.delete(q)
+                            total_deletes += 1
+                        continue
 
-                if raw == "":
+                    # Parsear límite
+                    try:
+                        v = int(raw)
+                    except ValueError:
+                        # entrada inválida: ignorar silenciosamente
+                        continue
+                    if v < 0:
+                        v = 0
+
+                    with db.session.no_autoflush:
+                        q = Quota.query.filter_by(
+                            transportista_id=transportista_id,
+                            arenera_id=a.id,
+                            date=d
+                        ).first()
+
                     if q:
-                        db.session.delete(q)
-                        total_deletes += 1
-                    continue
+                        # Update
+                        q.limit = v
+                        # Ajustar used si quedó por encima del nuevo límite
+                        if (q.used or 0) > v:
+                            q.used = v
+                        total_updates += 1
+                    else:
+                        # Insert
+                        q = Quota(
+                            transportista_id=transportista_id,
+                            arenera_id=a.id,
+                            date=d,
+                            limit=v,
+                            used=0
+                        )
+                        db.session.add(q)
+                        total_inserts += 1
 
-                try:
-                    v = int(raw)
-                    if v < 0: v = 0
-                except ValueError:
-                    continue
+            db.session.commit()
+            flash(
+                f"Cuotas guardadas · {total_inserts} nuevas, {total_updates} actualizadas, {total_deletes} eliminadas",
+                "success"
+            )
+        except Exception:
+            db.session.rollback()
+            flash("Error al guardar cuotas (posible duplicado). Reintentá.", "error")
 
-                if v == 0:
-                    if q:
-                        db.session.delete(q)
-                        total_deletes += 1
-                    continue
-
-                if not q:
-                    q = Quota(
-                        transportista_id=transportista_id,
-                        arenera_id=a.id,
-                        date=d,
-                        limit=v,
-                        used=0
-                    )
-                    db.session.add(q)
-                    total_inserts += 1
-                else:
-                    q.limit = v
-                    q.used = min(max(q.used, 0), v)
-                    total_updates += 1
-
-        db.session.commit()
-        flash(f"Cuotas guardadas · {total_inserts} nuevas, {total_updates} actualizadas, {total_deletes} eliminadas", "success")
         return redirect(url_for("manage_quotas", transportista_id=transportista_id, start=start_date.isoformat()))
 
+    # GET: armar datos para la grilla
     existing = (
         Quota.query
         .filter(
@@ -498,6 +519,7 @@ def manage_quotas(transportista_id):
         used_map=used_map,
         start_date=start_date
     )
+
 
 # Listado general de camiones (admin)
 @app.route("/admin/todos_camiones")
@@ -548,14 +570,12 @@ def admin_dashboard_data():
 
     en_viaje   = _count_status("En viaje")
     llegados   = _count_status("Llego")
-    cancelados = _count_status("Cancelado")
 
     kpi = {
         "rango": {"from": dfrom.isoformat(), "to": dto.isoformat()},
         "total": total,
         "en_viaje": en_viaje,
         "llegados": llegados,
-        "cancelados": cancelados,
     }
 
     sub_arenera = (
@@ -564,7 +584,6 @@ def admin_dashboard_data():
             func.count(Shipment.id).label("total"),
             func.sum(case((Shipment.status == "En viaje", 1), else_=0)).label("en_viaje"),
             func.sum(case((Shipment.status == "Llego",    1), else_=0)).label("llegados"),
-            func.sum(case((Shipment.status == "Cancelado",1), else_=0)).label("cancelados"),
         )
         .join(User, Shipment.arenera_id == User.id)
         .filter(Shipment.date >= dfrom, Shipment.date <= dto)
@@ -578,7 +597,6 @@ def admin_dashboard_data():
             "total": int(r.total or 0),
             "en_viaje": int(r.en_viaje or 0),
             "llegados": int(r.llegados or 0),
-            "cancelados": int(r.cancelados or 0),
         }
         for r in sub_arenera
     ]
@@ -589,7 +607,6 @@ def admin_dashboard_data():
             func.count(Shipment.id).label("total"),
             func.sum(case((Shipment.status == "En viaje", 1), else_=0)).label("en_viaje"),
             func.sum(case((Shipment.status == "Llego",    1), else_=0)).label("llegados"),
-            func.sum(case((Shipment.status == "Cancelado",1), else_=0)).label("cancelados"),
         )
         .join(User, Shipment.transportista_id == User.id)
         .filter(Shipment.date >= dfrom, Shipment.date <= dto)
@@ -603,7 +620,6 @@ def admin_dashboard_data():
             "total": int(r.total or 0),
             "en_viaje": int(r.en_viaje or 0),
             "llegados": int(r.llegados or 0),
-            "cancelados": int(r.cancelados or 0),
         }
         for r in sub_trans
     ]
@@ -625,14 +641,12 @@ def admin_dashboard_data():
         labels.append(day.isoformat())
         serie_lleg.append(m.get((day, "Llego"), 0))
         serie_viaje.append(m.get((day, "En viaje"), 0))
-        serie_canc.append(m.get((day, "Cancelado"), 0))
         day += timedelta(days=1)
 
     timeline = {
         "labels": labels,
         "llegados": serie_lleg,
         "en_viaje": serie_viaje,
-        "cancelados": serie_canc,
     }
 
     return {
@@ -672,19 +686,10 @@ def transportista_panel():
             Shipment.date >= week_start,
             Shipment.date <  next_monday
         ).count())
-
-    cancelados_semana = (Shipment.query
-        .filter(
-            Shipment.transportista_id == u.id,
-            Shipment.status == "Cancelado",
-            Shipment.date >= week_start,
-            Shipment.date <  next_monday
-        ).count())
-
+    
     stats = {
         "en_viaje":   en_viaje_total,
         "llegados":   llegados_semana,
-        "cancelados": cancelados_semana,
         "week_from":  week_start,
         "week_to":    next_monday - timedelta(days=1),
     }
@@ -715,7 +720,7 @@ def transportista_panel():
 @login_required
 @role_required("transportista")
 def transportista_quotas():
-    u = User.query.get(session["user_id"])
+    u = db.session.get(User, session["user_id"])
     today      = date.today()
     week_dates = [today + timedelta(days=i) for i in range(7)]
     quotas     = (
@@ -730,14 +735,107 @@ def transportista_quotas():
         if q.arenera:
             by_date.setdefault(q.date, []).append(q)
 
+    # Totales disponibles por fecha (debe ir ANTES del return)
+    totals_by_date = {}
+    for d in week_dates:
+        lst = by_date.get(d, [])
+        totals_by_date[d] = sum(max((q.limit or 0) - (q.used or 0), 0) for q in lst)
+
     return render_template(
         tpl("transportista_quotas"),
         user=u,
         week_dates=week_dates,
         by_date=by_date,
+        totals_by_date=totals_by_date
     )
 
 @app.route("/transportista/arenera/<int:arenera_id>", methods=["GET", "POST"])
+@login_required
+@role_required("transportista")
+def transportista_arenera(arenera_id):
+    u = db.session.get(User, session["user_id"])
+    # Leer la fecha SIEMPRE desde querystring (GET y POST)
+    date_str = request.args.get("date", date.today().isoformat())
+    try:
+        dt = date.fromisoformat(date_str)
+    except ValueError:
+        dt = date.today()
+
+    # Cupo del día (si no hay cupo configurado, 404)
+    q = (Quota.query
+         .filter_by(transportista_id=u.id, arenera_id=arenera_id, date=dt)
+         .first_or_404())
+
+    # Lista actual de envíos del día
+    shipments = (Shipment.query
+                 .filter_by(transportista_id=u.id, arenera_id=arenera_id, date=dt)
+                 .order_by(Shipment.id.desc())
+                 .all())
+
+    if request.method == "POST":
+        # Bloquea el registro de la cuota del día para evitar condiciones de carrera
+        q = (Quota.query
+             .filter_by(transportista_id=u.id, arenera_id=arenera_id, date=dt)
+             .with_for_update()
+             .first_or_404())
+
+        # Si no hay cupo, no creamos
+        if (q.used or 0) >= (q.limit or 0):
+            flash("No hay cupo disponible para esta fecha.", "error")
+            return redirect(url_for("transportista_arenera", arenera_id=arenera_id, date=dt.isoformat()))
+
+        # Tomar campos del form (NOMBRES EXACTOS)
+        chofer  = (request.form.get("nombre_apellido") or "").strip()
+        dni     = (request.form.get("dni") or "").strip()
+        gender  = (request.form.get("gender") or "").strip()
+        tipo    = (request.form.get("tipo") or "").strip()
+        tractor = (request.form.get("patente_tractor") or "").strip().upper()
+        trailer = (request.form.get("patente_batea") or "").strip().upper()
+
+        # Validaciones mínimas
+        if not (chofer and dni and tipo and tractor and trailer):
+            flash("Completá todos los campos obligatorios.", "error")
+            return redirect(url_for("transportista_arenera", arenera_id=arenera_id, date=dt.isoformat()))
+
+        # Crear envío
+        new_ship = Shipment(
+            transportista_id=u.id,
+            arenera_id=arenera_id,
+            date=dt,
+            chofer=chofer,
+            dni=dni,
+            gender=gender,
+            tipo=tipo,
+            tractor=tractor,
+            trailer=trailer,
+            status="En viaje",
+        )
+        db.session.add(new_ship)
+        db.session.flush()  # asegura ID si fuera necesario
+
+        # Recalcular usados del día y guardar
+        q.used = db.session.query(func.count(Shipment.id)).filter_by(
+            transportista_id=u.id, arenera_id=arenera_id, date=dt
+        ).scalar()
+
+        db.session.commit()
+        flash("Viaje cargado correctamente.", "success")
+        # **PRG**: redirigir SIEMPRE tras POST → debe verse 302 en logs
+        return redirect(url_for("transportista_arenera", arenera_id=arenera_id, date=dt.isoformat()))
+
+    # GET
+    used = q.used or 0
+    limit = q.limit or 0
+
+    return render_template(
+        tpl("transportista_arenera"),
+        assignment=q,
+        shipments=shipments,
+        used=used,
+        limit=limit,
+        date=dt,
+    )
+
 @login_required
 @role_required("transportista")
 def transportista_arenera(arenera_id):
@@ -852,7 +950,7 @@ def arenera_panel():
 @login_required
 @role_required("arenera")
 def arenera_history():
-    u = User.query.get(session["user_id"])
+    u = db.session.get(User, session["user_id"])
 
     start_str = (request.args.get("start_date") or "").strip()
     end_str   = (request.args.get("end_date") or "").strip()
@@ -899,7 +997,6 @@ def arenera_history():
         "total":      len(base_rows),
         "en_viaje":   sum(1 for s in base_rows if s.status == "En viaje"),
         "llegados":   sum(1 for s in base_rows if s.status == "Llego"),
-        "cancelados": sum(1 for s in base_rows if s.status == "Cancelado"),
     }
 
     if status:
@@ -918,21 +1015,25 @@ def arenera_history():
         search=(request.args.get("search") or "").strip(),
     )
 
-@app.route("/arenera/update/<int:shipment_id>", methods=["POST"])
+@app.route('/arenera/update/<int:shipment_id>', methods=['POST'])
 @login_required
-@role_required("arenera")
+@role_required('arenera')
 def arenera_update(shipment_id):
     s  = Shipment.query.get_or_404(shipment_id)
-    st = request.form["status"]
-    s.status = "Llego" if st == "Llego" else "Cancelado"
+    st = request.form['status']
+    # Sólo permitimos dos estados
+    if st not in ('En viaje', 'Llego'):
+        flash('Estado inválido', 'error')
+        return redirect(request.referrer or url_for('arenera_panel'))
+    s.status = st
     db.session.commit()
-    return redirect(request.referrer or url_for("arenera_panel"))
+    return redirect(request.referrer or url_for('arenera_panel'))
 
 @app.get("/arenera/export")
 @login_required
 @role_required("arenera")
 def arenera_export():
-    u = User.query.get(session["user_id"])
+    u = db.session.get(User, session["user_id"])
 
     start_str = (request.args.get("start") or "").strip()
     end_str   = (request.args.get("end") or "").strip()
@@ -954,14 +1055,17 @@ def arenera_export():
             .order_by(Shipment.date.desc(), Shipment.id.desc())
             .all())
 
-    sio = io.StringIO(newline="")
-    sio.write("sep=;\r\n")
-    w = csv.writer(sio, delimiter=";", lineterminator="\r\n")
+    # --- XLSX ---
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Historial"
 
-    w.writerow(["Fecha", "Transportista", "Chofer", "DNI", "CUIL", "Tractor", "Batea", "Tipo", "Estado"])
+    headers = ["Fecha", "Transportista", "Chofer", "DNI", "CUIL", "Tractor", "Batea", "Tipo", "Estado"]
+    ws.append(headers)
+
     for s in rows:
         cuil = calcular_cuil(getattr(s, "dni", ""), getattr(s, "gender", ""))
-        w.writerow([
+        ws.append([
             s.date.strftime("%d/%m/%Y") if s.date else "",
             (s.transportista.username if s.transportista else ""),
             s.chofer or "",
@@ -973,12 +1077,76 @@ def arenera_export():
             s.status or "",
         ])
 
-    csv_text = "\ufeff" + sio.getvalue()
-    resp = make_response(csv_text)
-    resp.headers["Content-Type"] = "application/vnd.ms-excel; charset=utf-8"
-    fname = f"arenera_{u.username}_{start_date.strftime('%Y-%m-%d')}_{end_date.strftime('%Y-%m-%d')}.csv"
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    resp = make_response(bio.getvalue())
+    resp.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    fname = f"arenera_{u.username}_{start_date.strftime('%Y-%m-%d')}_{end_date.strftime('%Y-%m-%d')}.xlsx"
+    resp.headers["Content-Disposition"] = f'attachment; filename=\"{fname}\"'
+    return resp
+
+@app.get("/admin/export")
+@login_required
+@role_required("admin")
+def admin_export():
+    # Filtros opcionales ?start=YYYY-MM-DD&end=YYYY-MM-DD&status=...
+    start_str = (request.args.get("start") or "").strip()
+    end_str   = (request.args.get("end") or "").strip()
+    status    = (request.args.get("status") or "").strip()
+
+    q = Shipment.query
+    if start_str:
+        try:
+            q = q.filter(Shipment.date >= date.fromisoformat(start_str))
+        except ValueError:
+            pass
+    if end_str:
+        try:
+            q = q.filter(Shipment.date <= date.fromisoformat(end_str))
+        except ValueError:
+            pass
+    if status:
+        q = q.filter(Shipment.status == status)
+
+    rows = (q
+        .join(User, Shipment.transportista_id==User.id)
+        .add_columns(User.username.label("transportista"))
+        .all())
+
+    # Construir XLSX
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Historial"
+    headers = ["Fecha","Transportista","Arenera","Chofer","DNI","Tractor","Batea","Tipo","Estado"]
+    ws.append(headers)
+
+    for s, transportista in rows:
+        arenera_name = s.arenera.username if s.arenera else ""
+        ws.append([
+            s.date.strftime("%Y-%m-%d"),
+            transportista,
+            arenera_name,
+            s.chofer,
+            s.dni,
+            s.tractor,
+            s.trailer,
+            s.tipo,
+            "Llegó" if s.status == "Llego" else s.status
+        ])
+
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    resp = make_response(bio.getvalue())
+    resp.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    fname = f"historial_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
     return resp
+
+
+
 
 # ----------------------------
 # LOG DE CONTRASEÑAS (admin)

@@ -71,6 +71,11 @@
     }
     .sub{ color:var(--muted); font-size:12px }
     .foot{ display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+    .dow{
+      font-size:12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
   </style>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -124,7 +129,10 @@
                 <tr>
                   <th>Arenera</th>
                   {% for d in week_dates %}
-                    <th class="center">{{ d.strftime('%d/%m') }}</th>
+                    <th>
+                      <div>{{ d.strftime('%d/%m') }}</div>
+                      <div class="dow">{{ ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][d.weekday()] }}</div>
+                    </th>
                   {% endfor %}
                 </tr>
               </thead>

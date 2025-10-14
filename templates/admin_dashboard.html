@@ -34,7 +34,7 @@
     .card-h h3{ margin:0; font-size:18px }
     .card-b{ padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
     .grid{ display:grid; gap:16px }
-    .grid-kpi{ grid-template-columns:repeat(4,1fr); }
+    .grid-kpi{ grid-template-columns:repeat(3,1fr); }
     .grid-bottom{ grid-template-columns:1fr 1fr; }
     @media (max-width:1000px){ .grid-kpi,.grid-bottom{ grid-template-columns:1fr 1fr } }
     @media (max-width:640px){ .grid-kpi{ grid-template-columns:1fr } .grid-bottom{ grid-template-columns:1fr } }
@@ -145,16 +145,6 @@
           </div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-b">
-          <div class="kpi">
-            <div>
-              <div class="label">Cancelados</div>
-              <div class="value" id="k_canc">0</div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- Serie temporal -->
@@ -173,7 +163,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>Arenera</th><th>Total</th><th>En viaje</th><th>Llegados</th><th>Cancelados</th></tr>
+                <tr><th>Arenera</th><th>Total</th><th>En viaje</th><th>Llegados</th><th></th></tr>
               </thead>
               <tbody id="tb_arenera"></tbody>
             </table>
@@ -187,7 +177,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>Transportista</th><th>Total</th><th>En viaje</th><th>Llegados</th><th>Cancelados</th></tr>
+                <tr><th>Transportista</th><th>Total</th><th>En viaje</th><th>Llegados</th><th></th></tr>
               </thead>
               <tbody id="tb_transp"></tbody>
             </table>
@@ -201,7 +191,6 @@
   const COLORS = {
   lleg: { line: '#10b981', fill: 'rgba(16,185,129,.15)' },   // verde
   viaje:{ line: '#f59e0b', fill: 'rgba(245,158,11,.15)' },   // naranja
-  canc: { line: '#ef4444', fill: 'rgba(239,68,68,.15)' }     // rojo
   };
 let chart = null;
 
@@ -238,7 +227,6 @@ async function loadData(){
   document.getElementById('k_total').textContent = k.total ?? 0;
   document.getElementById('k_viaje').textContent = k.en_viaje ?? 0;
   document.getElementById('k_lleg').textContent  = k.llegados ?? 0;
-  document.getElementById('k_canc').textContent  = k.cancelados ?? 0;
   document.getElementById('lblRango').textContent = k.rango ? `${k.rango.from} al ${k.rango.to}` : '—';
 
   // Tablas
@@ -249,7 +237,6 @@ async function loadData(){
   document.getElementById('na_arenera').style.display = ar.length ? 'none' : 'block';
   ar.forEach(r=>{
     const row = document.createElement('tr');
-    row.innerHTML = `<td>${r.arenera}</td><td>${r.total}</td><td>${r.en_viaje}</td><td>${r.llegados}</td><td>${r.cancelados}</td>`;
     tA.appendChild(row);
   });
 
@@ -257,7 +244,6 @@ async function loadData(){
   document.getElementById('na_transp').style.display = tr.length ? 'none' : 'block';
   tr.forEach(r=>{
     const row = document.createElement('tr');
-    row.innerHTML = `<td>${r.transportista}</td><td>${r.total}</td><td>${r.en_viaje}</td><td>${r.llegados}</td><td>${r.cancelados}</td>`;
     tT.appendChild(row);
   });
 
@@ -265,7 +251,6 @@ async function loadData(){
   const labels = (d.timeline && d.timeline.labels) || [];
   const lleg   = (d.timeline && d.timeline.llegados) || [];
   const viaje  = (d.timeline && d.timeline.en_viaje) || [];
-  const canc   = (d.timeline && d.timeline.cancelados) || [];
 
   const ctx = document.getElementById('series').getContext('2d');
   if(chart) chart.destroy();
@@ -291,11 +276,7 @@ async function loadData(){
           tension:.25, pointRadius:4, fill:false
         },
         {
-          label:'Cancelados',
-          data:canc,
-          borderColor: COLORS.canc.line,
-          backgroundColor: COLORS.canc.fill,
-          pointBackgroundColor: COLORS.canc.line,
+          label:'',
           tension:.25, pointRadius:4, fill:false
         }
       ]

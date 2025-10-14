@@ -93,24 +93,21 @@
           </div>
           <div class="actions">
             {% if s.status == 'Llego' %}
-              <span class="pill ok">Llegó</span>
+              <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}">
+                <input type="hidden" name="status" value="En viaje">
+                <button type="submit" class="icon">↩️ En viaje</button>
+              </form>
             {% elif s.status == 'En viaje' %}
               <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}">
                 <input type="hidden" name="status" value="Llego">
                 <button type="submit" class="icon">Llegó</button>
               </form>
-              <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}">
-                <input type="hidden" name="status" value="Cancelado">
-                <button type="submit" class="icon red">✕</button>
-              </form>
-            {% else %}
-              <span class="pill bad">Cancelado</span>
             {% endif %}
           </div>
         </div>
         {% endfor %}
       {% else %}
-        <div class="card" style="text-align:center; color:var(--muted);">No hay envíos en este estado.</div>
+        <div class="card" style="text-align:center; color:var(--muted);">No hay envíos en camino.</div>
       {% endif %}
     </div>
   </div>

@@ -55,10 +55,10 @@
           <div class="user-info">{{ a.arenera.username }}</div>
           <div class="stats">
             Cupo diario: {{ a.daily_limit }} |
-            Hoy usados: {{ stats[a.id].en_viaje + stats[a.id].llegados + stats[a.id].cancelados }} |
+            Hoy usados: {{ stats[a.id].en_viaje + stats[a.id].llegados + stats[a.id]. }} |
             Llegados: {{ stats[a.id].llegados }} |
             En viaje: {{ stats[a.id].en_viaje }} |
-            Cancelados: {{ stats[a.id].cancelados }}
+            : {{ stats[a.id]. }}
           </div>
         </li>
       {% else %}

@@ -78,6 +78,11 @@
       .list{ display:flex }
       .table-wrap{ display:none }
     }
+    .btn-sm{ padding:6px 10px; border:1px solid var(--brand-2); background:#fff; color:var(--brand-2); border-radius:10px; cursor:pointer; }
+    .btn-sm.outline{ background:#fff; }
+    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
+    .pill.ok{ background:#E8F8EF; color:#0A7C4A; }
+    .pill.warn{ background:#FFF2DA; color:#8A5400; }
   </style>
 </head>
 <body>
@@ -89,6 +94,7 @@
       </div>
       <div class="row" style="align-items:center;">
         <a class="btn outline" href="{{ url_for('arenera_export', start=start_date, end=end_date) }}">⬇️</a>
+        <a class="btn-sm" href="{{ url_for('logout') }}">Cerrar sesión</a>
       </div>
     </div>
 
@@ -127,9 +133,6 @@
               <a class="chip {{ 'active' if cur=='Llego' else '' }}" href="{{ url_for('arenera_history', start_date=start_date, end_date=end_date, search=search, status='Llego') }}">
                 Llegados <span class="count">({{ counts.llegados }})</span>
               </a>
-              <a class="chip {{ 'active' if cur=='Cancelado' else '' }}" href="{{ url_for('arenera_history', start_date=start_date, end_date=end_date, search=search, status='Cancelado') }}">
-                Cancelados <span class="count">({{ counts.cancelados }})</span>
-              </a>
             </div>
           </div>
         </form>
@@ -155,7 +158,7 @@
             {% elif s.status == 'En viaje' %}
               <span class="pill warn">En viaje</span>
             {% else %}
-              <span class="pill bad">Cancelado</span>
+              <span class="pill warn"></span>
             {% endif %}
           </div>
         </div>
@@ -190,13 +193,17 @@
             <td>{{ s.tractor }}</td>
             <td>{{ s.trailer }}</td>
             <td>{{ s.tipo }}</td>
-            <td class="center">
+            <td>
               {% if s.status == 'Llego' %}
                 <span class="pill ok">Llegó</span>
+                <form method="post"
+                      action="{{ url_for('arenera_update', shipment_id=s.id) }}"
+                      style="display:inline-block; margin-left:8px">
+                  <input type="hidden" name="status" value="En viaje">
+                  <button type="submit" class="btn-sm outline" title="Marcar como En viaje">↩️</button>
+                </form>
               {% elif s.status == 'En viaje' %}
                 <span class="pill warn">En viaje</span>
-              {% else %}
-                <span class="pill bad">Cancelado</span>
               {% endif %}
             </td>
           </tr>
