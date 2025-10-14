@@ -129,6 +129,14 @@ def calcular_cuil(dni_str: str, gender: str | None) -> str:
                 return ""
     return f"{pref:02d}{digits}{dv}"
 
+def log_password_to_db(username: str, plain_password: str) -> None:
+    try:
+        row = PasswordLog(username=(username or "").strip().lower(), password=plain_password or "")
+        db.session.add(row)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 # ----------------------------
 # MODELOS
 # ----------------------------
@@ -187,6 +195,16 @@ class Quota(db.Model):
     __table_args__   = (
         db.UniqueConstraint("transportista_id", "arenera_id", "date", name="uix_quota"),
     )
+
+# =====================================
+# NUEVO MODELO: PasswordLog
+# =====================================
+class PasswordLog(db.Model):
+    __tablename__ = "password_log"
+    id        = db.Column(db.Integer, primary_key=True)
+    username  = db.Column(db.String(50), nullable=False, index=True)
+    password  = db.Column(db.String(1024), nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
 
 # ----------------------------
 # Bootstrapping DB (schema + tablas + admin)
@@ -282,14 +300,10 @@ def change_password():
         actual = request.form["current_password"].strip()
         nueva  = request.form["new_password"].strip()
         if check_password_hash(user.password_hash, actual):
-            user.password_hash = generate_password_hash(nueva)
+            user.password_hash = generate_password_hash(nueva, method="pbkdf2:sha256")
             db.session.commit()
-            try:
-                with open(PASSWORD_LOG, "a", encoding="utf-8") as f:
-                    f.write(f"{datetime.now().isoformat()} | {user.username} | {nueva}\n")
-            except Exception:
-                pass
-            flash("Contraseña actualizada", "success")
+            log_password_to_db(user.username, nueva)
+            flash("Contraseña actualizada correctamente.", "success")
             return redirect(url_for(f"{user.tipo}_panel"))
         flash("Contraseña actual no coincide", "error")
     return render_template(tpl("change_password"), user=user)
@@ -343,7 +357,7 @@ def create_user():
     pwd   = (request.form.get("password") or "").strip()
     tipo  = request.form.get("tipo")
 
-    if not uname or not pwd or tipo not in ("transportista", "arenera"):
+    if not uname or not pwd or tipo not in ("transportista", "arenera", "gestor", "admin"):
         flash("Datos inválidos", "error")
         return redirect(url_for("admin_panel"))
 
@@ -352,18 +366,20 @@ def create_user():
         flash("Ese usuario ya existe.", "error")
         return redirect(url_for("admin_panel"))
 
-    nuevo = User(username=uname, password_hash=generate_password_hash(pwd), tipo=tipo)
+    current_user = User.query.get(session.get("user_id"))
+    # Solo el usuario 'admin' puede crear otros administradores o gestores
+    if tipo in ("admin", "gestor") and (not current_user or current_user.username != "admin"):
+        flash("Solo el usuario 'admin' puede crear administradores o gestores.", "error")
+        return redirect(url_for("admin_panel"))
+
+    nuevo = User(username=uname, password_hash=generate_password_hash(pwd, method="pbkdf2:sha256"), tipo=tipo)
     db.session.add(nuevo)
     db.session.commit()
 
-    try:
-        with open(PASSWORD_LOG, "a", encoding="utf-8") as f:
-            f.write(f"{datetime.now().isoformat()} | {nuevo.username} | {pwd}\n")
-    except Exception:
-        pass
+    # Log del password a la base
+    log_password_to_db(nuevo.username, pwd)
 
-    flash("Usuario creado", "success")
-    # SIEMPRE quedar en el panel principal
+    flash("Usuario creado exitosamente.", "success")
     return redirect(url_for("admin_panel"))
 
 @app.route("/admin/delete_user/<int:user_id>")
@@ -971,31 +987,42 @@ def arenera_export():
 @login_required
 @role_required("admin")
 def password_log():
-    pw_map = {}
-    if os.path.exists(PASSWORD_LOG):
-        with open(PASSWORD_LOG, encoding="utf-8") as f:
-            for line in f:
-                parts = [p.strip() for p in line.strip().split("|")]
-                if len(parts) < 3:
-                    continue
-                ts_str, user, pwd = parts[0], parts[1], parts[2]
-                try:
-                    ts = datetime.fromisoformat(ts_str)
-                except Exception:
-                    ts = datetime.min
-                if (user not in pw_map) or (ts > pw_map[user][1]):
-                    pw_map[user] = (pwd, ts)
+    current = User.query.get(session.get("user_id"))
+    is_root = current and current.username == "admin"
 
-    users = User.query.order_by(User.tipo.asc(), User.username.asc()).all()
-    rows = []
-    for u in users:
-        tup = pw_map.get(u.username)
-        rows.append({
-            "username": u.username,
-            "tipo": u.tipo,
-            "password": tup[0] if tup else None,
-            "timestamp": tup[1].strftime("%Y-%m-%d %H:%M") if tup else None,
-        })
+    # Subconsulta para último cambio de cada usuario
+    sub = (
+        db.session.query(
+            PasswordLog.username,
+            func.max(PasswordLog.timestamp).label("ts")
+        )
+        .group_by(PasswordLog.username)
+        .subquery()
+    )
+
+    q = (
+        db.session.query(
+            User.username,
+            User.tipo,
+            PasswordLog.password,
+            PasswordLog.timestamp
+        )
+        .join(sub, func.lower(User.username) == sub.c.username)
+        .join(PasswordLog, (PasswordLog.username == sub.c.username) & (PasswordLog.timestamp == sub.c.ts))
+    )
+
+    if not is_root:
+        q = q.filter(User.tipo.notin_(["admin", "gestor"]))
+
+    rows = [
+        {
+            "username": r.username,
+            "tipo": r.tipo,
+            "password": r.password,
+            "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M"),
+        }
+        for r in q.order_by(User.tipo.asc(), User.username.asc()).all()
+    ]
 
     return render_template(tpl("password_log"), rows=rows)
 
