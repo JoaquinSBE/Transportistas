@@ -3,30 +3,11 @@ import os
 import io, csv
 from datetime import datetime, date, timedelta
 from functools import wraps
-from sqlalchemy import func, case, cast, Integer
+from sqlalchemy import func, case, cast, Integer, text
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 
-
-# ----------------------------
-# Configuración por .env
-# ----------------------------
-try:
-    # Permite usar .env sin dependencias si no está instalado python-dotenv
-    from dotenv import load_dotenv  # type: ignore
-    load_dotenv()
-except Exception:
-    pass
-
-# Variables de entorno (con defaults razonables para DEV)
-SECRET_KEY      = os.getenv("FLASK_SECRET_KEY", "clave-super-secreta-para-dev")
-DATABASE_URL    = os.getenv("DATABASE_URL", "sqlite:///camiones.db")  # Cambiar a postgres luego
-TPL_EXT         = os.getenv("TPL_EXT", ".html")
-PASSWORD_LOG    = os.getenv("PASSWORD_LOG", os.path.join("Data", "passwords.log"))
-ADMIN_USER      = os.getenv("ADMIN_USER", "admin")
-ADMIN_PASS      = os.getenv("ADMIN_PASS", "admin123")
-
 # ----------------------------
 # Configuración por .env
 # ----------------------------
@@ -36,16 +17,36 @@ try:
 except Exception:
     pass
 
-# Variables de entorno (soporta FLASK_SECRET_KEY o SECRET_KEY)
 SECRET_KEY   = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY", "clave-super-secreta-para-dev")
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///camiones.db")  # Render setea esta var
 TPL_EXT      = os.getenv("TPL_EXT", ".html")
 PASSWORD_LOG = os.getenv("PASSWORD_LOG", os.path.join("Data", "passwords.log"))
 ADMIN_USER   = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS   = os.getenv("ADMIN_PASS", "admin123")
 
-# Schema (para aislar tablas en la misma base)
-DB_SCHEMA    = os.getenv("DB_SCHEMA", "transportistas")
+# Detección simple de Render
+IS_RENDER = bool(os.getenv("RENDER") or os.getenv("RENDER_EXTERNAL_URL"))
+
+# Esquema
+DB_SCHEMA  = os.getenv("DB_SCHEMA", "transportistas")
+
+# DATABASE_URL: en Render es obligatorio, en local podés caer a SQLite
+DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
+if not DATABASE_URL:
+    if IS_RENDER:
+        raise RuntimeError("DATABASE_URL no está definido en producción")
+    # Sólo local
+    DATABASE_URL = "sqlite:///instance/app.db"
+
+# Normalización a psycopg3
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://","postgresql+psycopg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL.split("://", 1)[1]
+
+# search_path por URL (transportistas,public) — evita usar event connect
+if DATABASE_URL.startswith("postgresql+psycopg://"):
+    sep = '&' if '?' in DATABASE_URL else '?'
+    DATABASE_URL = f"{DATABASE_URL}{sep}options=-csearch_path%3D{DB_SCHEMA},public"
 
 # ----------------------------
 # Inicialización Flask / DB
@@ -55,9 +56,14 @@ app.secret_key = SECRET_KEY
 
 # Compatibilidad: postgres:// -> postgresql:// (SQLAlchemy)
 if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgres://","postgresql+psycopg://", 1)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+# Log “seguro” del DSN (sin user:pass) para validar en Render
+_safe = DATABASE_URL
+if "@" in _safe:
+    _safe = _safe.split("@", 1)[-1]
+app.logger.info(f"DB URI efectiva → postgresql://***:***@{_safe}" if "postgresql+psycopg" in DATABASE_URL else f"DB URI efectiva → {_safe}")
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # Pool “amigable” con Render (free/low)
@@ -69,19 +75,6 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 }
 
 db = SQLAlchemy(app)
-
-# --- Search Path al schema elegido (evita mezclar con otras apps) ---
-from sqlalchemy import event, text
-from sqlalchemy.engine import Engine
-
-@event.listens_for(Engine, "connect")
-def _set_search_path(dbapi_connection, connection_record):
-    try:
-        with dbapi_connection.cursor() as cur:
-            cur.execute(f"SET search_path TO {DB_SCHEMA}")
-    except Exception:
-        # Si la base es SQLite o falla el comando, lo ignoramos sin romper el arranque
-        pass
 
 # --- (Primera vez) crear schema y tablas ---
 # Podés controlar esto con INIT_DB_ON_BOOT=0 si no querés que corra en cada deploy
@@ -247,30 +240,6 @@ class Quota(db.Model):
         db.UniqueConstraint("transportista_id", "arenera_id", "date", name="uix_quota"),
     )
 
-
-# ----------------------------
-# Bootstrap DB y admin por defecto
-# ----------------------------
-with app.app_context():
-    db.create_all()
-
-    admin_name_norm = norm_username(os.getenv("ADMIN_USER", "admin"))
-    admin_pass      = os.getenv("ADMIN_PASS", "admin123")
-
-    admin_exists = db.session.query(User).filter(
-        func.lower(User.username) == admin_name_norm,
-        User.tipo == "admin"
-    ).first()
-
-    if not admin_exists:
-        admin = User(
-            username=admin_name_norm,
-            password_hash=generate_password_hash(admin_pass),
-            tipo="admin",
-        )
-        db.session.add(admin)
-        db.session.commit()
-
 # ----------------------------
 # Decoradores de auth
 # ----------------------------
@@ -413,7 +382,7 @@ def create_user():
     # Duplicado case-insensitive
     exists = db.session.query(User).filter(func.lower(User.username) == uname).first()
     if exists:
-        flash("Ese usuario ya existe (insensible a mayúsculas).", "error")
+        flash("Ese usuario ya existe.", "error")
         return redirect(url_for("admin_panel"))
 
     nuevo = User(username=uname, password_hash=generate_password_hash(pwd), tipo=tipo)
@@ -427,7 +396,7 @@ def create_user():
         pass
 
     flash("Usuario creado", "success")
-    if tipo == "transportista":
+    if tipo == "transportist":
         return redirect(url_for("admin_panel"))
     return redirect(url_for("admin_panel"))
 
