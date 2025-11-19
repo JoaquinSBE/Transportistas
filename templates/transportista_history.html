@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Historial · Transportista</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
+      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{ box-sizing:border-box }
+    html,body{
+      margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;
+      -webkit-text-size-adjust:100%;
+    }
+    .wrap{ max-width:1100px; margin:0 auto; padding:16px 12px 90px; }
+
+    /* header */
+    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+    .hello{ display:flex; flex-direction:column; }
+    .hello h1{ margin:0; font-size:18px }
+    .hello .sub{ color:var(--muted); font-size:12px }
+    .btn, .btn-sm, .btn-icon{
+      border:1px solid var(--brand-2); color:#fff; background:var(--brand-2);
+      border-radius:12px; padding:10px 12px; font-weight:800; text-decoration:none;
+    }
+    .btn-sm{ padding:8px 10px }
+    .btn.outline{ background:#fff; color:var(--brand-2) }
+
+    /* filtros */
+    .filters{
+      position:sticky; top:0; z-index:5; margin-top:12px;
+      background:linear-gradient(#f5f7fb 60%, rgba(245,247,251,.9));
+      border-bottom:1px solid var(--ring);
+    }
+    .card{
+      background:var(--card); border-radius:var(--radius);
+      border:1px solid var(--ring); box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04);
+      padding:10px; margin-bottom:12px;
+    }
+    .row{ display:flex; gap:8px; align-items:end; flex-wrap:wrap }
+    label{ font-size:12px; color:var(--muted); display:block; margin:0 2px 6px }
+    .in{ min-height:40px; padding:10px 12px; border-radius:12px; border:1px solid var(--ring); background:#fff; color:var(--ink); }
+    .in:focus{ outline:none; border-color:#b5c8ff; box-shadow:0 0 0 3px rgba(37,99,235,.15) }
+    .grow{ flex:1 1 220px }
+
+    .chips{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .chip{
+      padding:8px 12px; border-radius:999px; border:1px solid var(--ring); background:#fff; color:var(--ink);
+      font-weight:700; text-decoration:none; display:inline-flex; gap:6px; align-items:center;
+    }
+    .chip.active{ border-color:var(--brand-2); box-shadow:0 0 0 3px rgba(37,99,235,.15) }
+    .count{ font-size:12px; color:var(--muted) }
+
+    /* lista cards (móvil) */
+    .list{ display:none; flex-direction:column; gap:10px }
+    .item{ display:grid; grid-template-columns:6px 1fr auto; gap:12px; align-items:center; background:#fff; border:1px solid var(--ring); border-radius:14px; padding:12px; position:relative; overflow:hidden; }
+    .band{ height:100%; border-radius:4px; }
+    .band.ok{ background:var(--ok) } .band.warn{ background:var(--warn) } .band.bad{ background:var(--bad) }
+    
+    .title{ font-weight:800; font-size:15px; }
+    .meta{ color:var(--muted); font-size:13px; margin-top:4px; line-height:1.4; }
+    
+    /* Grilla de datos interna */
+    .data-row{ display:flex; gap:16px; margin-top:12px; font-size:13px; padding-top:12px; border-top:1px solid #f1f5f9; }
+    .data-col{ display:flex; flex-direction:column; }
+    .data-lbl{ font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase; margin-bottom:2px; }
+    .data-val{ font-weight:600; color:var(--ink); font-size:14px; }
+    .data-val.cert{ color:var(--ok); }
+
+    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px }
+    .pill.ok{ background:#e9f9f2; color:#0d7a5a; border:1px solid #cfeee1 }
+    .pill.warn{ background:#fff3d6; color:#8a5a07; border:1px solid #ffe7a3 }
+    .pill.cert{ background:#eef2ff; color:#1e40af; border:1px solid #dbeafe; font-weight:800; }
+
+    .id-badge { color:var(--brand-2); margin-right:4px; font-weight:900; }
+
+    /* tabla (desktop) */
+    .table-wrap{ overflow:auto; -webkit-overflow-scrolling:touch }
+    table{ width:100%; border-collapse:separate; border-spacing:0 }
+    th, td{ padding:10px 8px; border-bottom:1px solid var(--ring); font-size:14px; white-space:nowrap; text-align:left }
+    th{ color:var(--muted); background:#fafbff; position:sticky; top:0; z-index:1 }
+    td.center, th.center{ text-align:center }
+    .cert-ok { color:var(--ok); font-weight:700; }
+
+    @media (max-width:820px){
+      .list{ display:flex }
+      .table-wrap{ display:none }
+    }
+    
+    /* Navbar */
+    .nav{ position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring); display:flex; justify-content:space-around; padding:8px 10px; z-index:10 }
+    .nav a{ flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700; padding:10px 8px; border-radius:10px }
+    .nav a.active{ background:#eef2ff }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="hello">
+        <h1>Historial</h1>
+        <div class="sub">{{ user.username }}</div>
+      </div>
+      <div class="row" style="align-items:center;">
+        <a class="btn outline" href="{{ url_for('transportista_export', start=start_date, end=end_date) }}">Excel 📥</a>
+        <a class="btn-sm" href="{{ url_for('logout') }}">Salir</a>
+      </div>
+    </div>
+
+    <div class="filters">
+      <div class="card">
+        <form method="get" action="{{ url_for('transportista_history') }}">
+          <div class="row">
+            <div>
+              <label>Desde</label>
+              <input class="in" type="date" name="start_date" value="{{ start_date }}">
+            </div>
+            <div>
+              <label>Hasta</label>
+              <input class="in" type="date" name="end_date" value="{{ end_date }}">
+            </div>
+            <div class="grow">
+              <label>Buscar</label>
+              <input class="in" type="text" name="search" placeholder="#ID, Arenera, Chofer, Patente..." value="{{ search or '' }}">
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="btn" type="submit">Aplicar</button>
+            </div>
+          </div>
+
+          <div class="row" style="align-items:center; margin-top:8px;">
+            <div class="chips">
+              {% set cur = status or '' %}
+              <a class="chip {{ 'active' if cur=='' else '' }}" href="{{ url_for('transportista_history', start_date=start_date, end_date=end_date, search=search) }}">
+                Todos <span class="count">({{ counts.total }})</span>
+              </a>
+              <a class="chip {{ 'active' if cur=='En viaje' else '' }}" href="{{ url_for('transportista_history', start_date=start_date, end_date=end_date, search=search, status='En viaje') }}">
+                En viaje <span class="count">({{ counts.en_viaje }})</span>
+              </a>
+              <a class="chip {{ 'active' if cur=='Llego' else '' }}" href="{{ url_for('transportista_history', start_date=start_date, end_date=end_date, search=search, status='Llego') }}">
+                Llegados <span class="count">({{ counts.llegados }})</span>
+              </a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="list">
+      {% if shipments %}
+        {% for s in shipments %}
+        <div class="item">
+          <div class="band {{ 'ok' if s.status=='Llego' else ('warn' if s.status=='En viaje' else 'bad') }}"></div>
+          <div>
+            <div class="title">
+              <span class="id-badge">#{{ s.id }}</span>
+              {{ s.arenera.username }}
+            </div>
+            <div class="meta">
+              {{ s.date.strftime('%d/%m') }} · {{ s.chofer }} · {{ s.tractor }} / {{ s.trailer }}
+            </div>
+            
+            <div class="data-row">
+              <div class="data-col">
+                <span class="data-lbl">Remito</span>
+                <span class="data-val {{ 'cert' if s.cert_status == 'Certificado' else '' }}">
+                   {% if s.cert_status == 'Certificado' %}
+                      {{ s.final_remito or '-' }} <small>✓</small>
+                   {% else %}
+                      {{ s.remito_arenera or '-' }}
+                   {% endif %}
+                </span>
+              </div>
+
+              <div class="data-col">
+                <span class="data-lbl">Tn Orig</span>
+                <span class="data-val">{{ ('%.2f' % s.peso_neto_arenera).replace('.', ',') if s.peso_neto_arenera else '-' }}</span>
+              </div>
+              
+              <div class="data-col">
+                <span class="data-lbl">Tn Final</span>
+                <span class="data-val {{ 'cert' if s.cert_status == 'Certificado' else '' }}">
+                   {% if s.cert_status == 'Certificado' %}
+                      {{ ('%.2f' % s.final_peso).replace('.', ',') if s.final_peso else '-' }}
+                   {% else %}
+                      -
+                   {% endif %}
+                </span>
+              </div>
+            </div>
+
+          </div>
+            <div>
+                {% if s.cert_status == 'Certificado' %}
+                <span class="pill cert">Certificado</span>
+                {% elif s.status == 'Llego' %}
+                <span class="pill ok">Llegó</span>
+                {% elif s.status == 'En viaje' %}
+                <span class="pill warn">En viaje</span>
+                {% else %}
+                <span class="pill warn">{{ s.status }}</span>
+                {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="card" style="text-align:center; color:var(--muted);">Sin resultados.</div>
+      {% endif %}
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Fecha</th>
+            <th>Arenera</th>
+            <th>Chofer</th>
+            <th>Patente</th>
+            
+            <th style="border-left:2px solid #eee;">Remito</th>
+            
+            <th>Tn (Orig)</th>
+            <th>Tn (Fin)</th>
+            
+            <th class="center">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in shipments %}
+          <tr>
+            <td><strong style="color:var(--brand-2);">#{{ s.id }}</strong></td>
+            <td>{{ s.date.strftime('%d/%m/%Y') if s.date else s.date }}</td>
+            <td>{{ s.arenera.username if s.arenera else '—' }}</td>
+            <td>{{ s.chofer }}</td>
+            <td>{{ s.tractor }}</td>
+            
+            <td style="border-left:2px solid #eee;">
+               {% if s.cert_status == 'Certificado' %}
+                  <span class="cert-ok">{{ s.final_remito or '-' }}</span>
+               {% else %}
+                  {{ s.remito_arenera or '-' }}
+               {% endif %}
+            </td>
+            
+            <td>{{ ('%.2f' % s.peso_neto_arenera).replace('.', ',') if s.peso_neto_arenera else '-' }}</td>
+            
+            <td>
+               {% if s.cert_status == 'Certificado' %}
+                  <span class="cert-ok">{{ ('%.2f' % s.final_peso).replace('.', ',') if s.final_peso else '-' }}</span>
+               {% else %}
+                  <span style="color:#ccc;">-</span>
+               {% endif %}
+            </td>
+
+            <td class="center">
+              {% if s.cert_status == 'Certificado' %}
+                <span class="pill cert">✓ Certificado</span>
+              {% elif s.status == 'Llego' %}
+                <span class="pill ok">Llegó</span>
+              {% elif s.status == 'En viaje' %}
+                <span class="pill warn">En viaje</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <a href="{{ url_for('transportista_panel') }}">Inicio</a>
+    <a href="{{ url_for('transportista_quotas') }}">Cuotas</a>
+    <a class="active" href="{{ url_for('transportista_history') }}">Historial</a>
+  </nav>
+</body>
+</html>

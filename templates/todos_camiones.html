@@ -101,6 +101,15 @@
             <label>Búsqueda rápida</label>
             <input id="q" class="in" type="text" placeholder="Chofer / DNI / Patente">
           </div>
+          <div>
+            <label>Desde</label>
+            <input class="in" type="date" name="from" value="{{ dfrom or '' }}">
+          </div>
+          <div>
+            <label>Hasta</label>
+            <input class="in" type="date" name="to" value="{{ dto or '' }}">
+          </div>
+
         </form>
       </div>
     </div>

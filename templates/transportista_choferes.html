@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Gestión de Choferes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    /* Usando estilos base de tus otros archivos */
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
+      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; -webkit-text-size-adjust:100%; }
+    .wrap{ max-width:760px; margin:0 auto; padding:16px 12px 80px; }
+
+    /* Header */
+    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom: 12px; }
+    .top h1{ margin:0; font-size:24px }
+    .btn-sm{ padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--brand-2); text-decoration:none; font-weight:600; }
+    
+    /* Card y Form */
+    .card{ background:var(--card); border-radius:var(--radius); border:1px solid var(--ring); box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04); margin-top:12px; padding:16px; }
+    .form-grid{ display:grid; grid-template-columns: repeat(2, 1fr); gap:12px }
+    @media (max-width:560px){ .form-grid{ grid-template-columns: 1fr; } }
+
+    label{ font-size:12px; color:var(--muted); display:block; margin:8px 2px 6px; }
+    .in{ width:100%; min-height:40px; padding:10px 12px; border-radius:12px; border:1px solid var(--ring); background:#fff; color:var(--ink); }
+    .btn{ width:100%; min-height:46px; padding:12px; border-radius:12px; border:1px solid var(--brand-2); background:var(--brand-2); color:#fff; font-weight:800; }
+    .btn.delete{ background:var(--bad); border-color:var(--bad); }
+
+    /* Flashes */
+    .flashes{ margin-bottom:16px; display:flex; flex-direction:column; gap:8px; }
+    .flash{ padding:12px 14px; border-radius:12px; font-size:14px; font-weight:600; border:1px solid transparent; }
+    .flash.success{ background:#e9f9f2; color:#0d7a5a; border-color:#cfeee1; }
+    .flash.error{ background:#ffe4e4; color:#8a1a1a; border-color:#f7c2c2; }
+    
+    /* Lista de Choferes */
+    .list{ display:flex; flex-direction:column; gap:8px; margin-top:16px; }
+    .chofer-item{ display:grid; grid-template-columns: 1fr auto; align-items:center; background:#fff; border:1px solid var(--ring); border-radius:12px; padding:12px; }
+    .name{ font-weight:700; }
+    .meta{ color:var(--muted); font-size:12px; margin-top:4px; }
+    .actions{ display:flex; gap:8px; }
+    .edit-btn{ padding:6px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--brand-2); font-weight:600; cursor:pointer; }
+    .delete-btn{ padding:6px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--bad); font-weight:600; cursor:pointer; }
+    
+    /* Modal/Overlay para edición */
+    .overlay {
+      position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:20;
+      display:none; place-items:center;
+    }
+    .modal-content{ width:90%; max-width:450px; background:var(--card); border-radius:var(--radius); padding:20px; }
+
+    /* Segmented control (género) */
+    .seg{ display:flex; gap:8px; }
+    .seg button{
+      flex:1; min-height:40px; border:1px solid var(--ring); background:#fff; color:var(--ink);
+      border-radius:12px; font-weight:700; cursor:pointer;
+    }
+    .seg button.active{ border-color:var(--brand-2); box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>Mis Choferes ({{ choferes|length }})</h1>
+      <a class="btn-sm" href="{{ url_for('transportista_panel') }}">Volver</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for category, message in messages %}
+            <div class="flash {{ 'success' if category in ['success','ok'] else 'error' }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="card">
+      <form method="post" action="{{ url_for('transportista_choferes') }}">
+        <input type="hidden" name="action" value="save">
+        <h2>Añadir Chofer</h2>
+        <div class="form-grid">
+          <div><label>Nombre Completo</label><input class="in" type="text" name="nombre" placeholder="Juan Pérez" required></div>
+          <div><label>DNI</label><input class="in" type="text" name="dni" placeholder="12345678" inputmode="numeric" pattern="[0-9]*" required></div>
+          <div><label>Patente Tractor</label><input class="in" type="text" name="tractor" placeholder="AA123BB"></div>
+          <div><label>Patente Trailer/Batea</label><input class="in" type="text" name="trailer" placeholder="AB123CD"></div>
+          
+          <div>
+            <label>Género</label>
+            <div class="seg" id="create-gender-seg">
+              <button type="button" data-val="M" class="active">M</button>
+              <button type="button" data-val="F">F</button>
+            </div>
+            <input type="hidden" name="gender" value="M" id="create-gender-input">
+          </div>
+          
+          <div>
+            <label>Tipo de Vehículo</label>
+            <select class="in" name="tipo">
+              <option value="Batea">Batea</option>
+              <option value="Bivuelco">Bivuelco</option>
+            </select>
+          </div>
+          
+          <div style="display:flex; align-items:flex-end; grid-column: span 2;">
+            <button class="btn" type="submit">Guardar Chofer</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Choferes registrados</h2>
+      <div class="list">
+        {% for c in choferes %}
+        <div class="chofer-item">
+          <div>
+            <div class="name">{{ c.nombre }} <small>({{ c.dni }})</small></div>
+            <div class="meta">
+              Tipo: {{ c.tipo or '—' }} · Género: {{ c.gender or '—' }}
+              <br>
+              {% if c.tractor or c.trailer %}
+                Tractor: {{ c.tractor or '—' }} · Trailer: {{ c.trailer or '—' }}
+              {% else %}
+                Sin patentes asignadas.
+              {% endif %}
+            </div>
+          </div>
+          <div class="actions">
+            <button class="edit-btn" type="button" onclick="openEditModal({{ c.id }})">Editar</button>
+            <form method="post" action="{{ url_for('transportista_choferes') }}" onsubmit="return confirm('¿Eliminar a {{ c.nombre }}?');" style="display:inline;">
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="chofer_id" value="{{ c.id }}">
+              <button class="delete-btn" type="submit">✕</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% if not choferes %}
+        <p style="text-align:center; color:var(--muted);">Aún no tienes choferes registrados.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div id="edit-modal" class="overlay">
+    <div class="modal-content">
+      <h2>Editar Chofer</h2>
+      <form method="post" action="{{ url_for('transportista_choferes') }}">
+        <input type="hidden" name="action" value="save">
+        <input type="hidden" name="chofer_id" id="modal-chofer-id">
+        
+        <div><label>Nombre Completo</label><input class="in" type="text" name="nombre" id="modal-nombre" required></div>
+        <div><label>DNI</label><input class="in" type="text" name="dni" id="modal-dni" required readonly></div>
+        <div><label>Patente Tractor</label><input class="in" type="text" name="tractor" id="modal-tractor" placeholder="AA123BB"></div>
+        <div><label>Patente Trailer/Batea</label><input class="in" type="text" name="trailer" id="modal-trailer" placeholder="AB123CD"></div>
+        
+        <div>
+          <label>Género</label>
+          <div class="seg" id="modal-gender-seg">
+            <button type="button" data-val="M">M</button>
+            <button type="button" data-val="F">F</button>
+          </div>
+          <input type="hidden" name="gender" id="modal-gender-input">
+        </div>
+
+        <div>
+          <label>Tipo de Vehículo</label>
+          <select class="in" name="tipo" id="modal-tipo">
+            <option value="Batea">Batea</option>
+            <option value="Bivuelco">Bivuelco</option>
+          </select>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:20px;">
+          <button class="btn" type="submit" style="flex:1;">Guardar Cambios</button>
+          <button class="btn delete" type="button" onclick="closeEditModal()" style="flex:1; max-width:100px;">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // 1. Cargamos los datos de choferes desde Jinja (array)
+    const choferes_data = {{ choferes | tojson }};
+    
+    // 2. Mapeamos el array a un objeto por ID para acceso rápido (CLAVE para la edición)
+    const choferes_map = {};
+    choferes_data.forEach(c => {
+        choferes_map[c.id] = c;
+    });
+
+
+    // --- Lógica del Segmented Control (Género) ---
+    function setupSegmentedControl(containerId, hiddenInputId) {
+        const seg = document.getElementById(containerId);
+        const hidden = document.getElementById(hiddenInputId);
+        
+        if (!seg || !hidden) return (val) => {};
+
+        function updateState(val) {
+            val = val || 'M'; // Default a 'M'
+            seg.querySelectorAll('button').forEach(b => {
+                const isActive = b.getAttribute('data-val') === val;
+                b.classList.toggle('active', isActive);
+            });
+            hidden.value = val;
+        }
+
+        seg.addEventListener('click', e => {
+            if (e.target.tagName === 'BUTTON') {
+                updateState(e.target.getAttribute('data-val'));
+            }
+        });
+        return updateState;
+    }
+
+    // Inicializar control de creación
+    const updateCreateGender = setupSegmentedControl('create-gender-seg', 'create-gender-input');
+    updateCreateGender('M'); // Establecer valor inicial
+
+    // --- Lógica del Modal ---
+    const modal = document.getElementById('edit-modal');
+    const updateModalGender = setupSegmentedControl('modal-gender-seg', 'modal-gender-input'); // Inicializar control del modal
+
+    /**
+     * Abre el modal de edición para un chofer, buscando sus datos por ID.
+     * @param {number} chofer_id 
+     */
+    function openEditModal(chofer_id) {
+        const chofer = choferes_map[chofer_id];
+
+        if (!chofer) {
+            console.error("Chofer no encontrado con ID:", chofer_id);
+            return;
+        }
+        
+        document.getElementById('modal-chofer-id').value = chofer.id;
+        document.getElementById('modal-nombre').value = chofer.nombre;
+        // El DNI es de sólo lectura y sirve como identificador
+        document.getElementById('modal-dni').value = chofer.dni; 
+        document.getElementById('modal-tractor').value = (chofer.tractor || '').toUpperCase();
+        document.getElementById('modal-trailer').value = (chofer.trailer || '').toUpperCase();
+        
+        // Sincronizar SELECT de Tipo
+        document.getElementById('modal-tipo').value = chofer.tipo || 'Batea';
+
+        // Sincronizar estado de género
+        updateModalGender(chofer.gender || 'M');
+
+        modal.style.display = 'grid';
+    }
+
+    function closeEditModal() {
+        modal.style.display = 'none';
+    }
+
+    // Cierra si clickea fuera del contenido
+    modal.addEventListener('click', (e) => {
+        if (e.target.id === 'edit-modal') {
+            closeEditModal();
+        }
+    });
+
+    // Convierte patentes a mayúsculas
+    document.querySelectorAll('input[name="tractor"], input[name="trailer"]').forEach(inp => {
+        inp.addEventListener('input', () => { inp.value = (inp.value || '').toUpperCase().replace(/\s+/g,''); });
+    });
+
+  </script>
+</body>
+</html>

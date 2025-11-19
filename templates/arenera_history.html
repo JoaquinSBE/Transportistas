@@ -67,6 +67,9 @@
     .pill.warn{ background:#fff3d6; color:#8a5a07; border:1px solid #ffe7a3 }
     .pill.bad{ background:#ffe4e4; color:#8a1a1a; border:1px solid #f7c2c2 }
 
+    /* ID badge style */
+    .id-badge { color:var(--brand-2); margin-right:4px; font-weight:900; }
+
     .table-wrap{ overflow:auto; -webkit-overflow-scrolling:touch }
     table{ width:100%; border-collapse:separate; border-spacing:0 }
     th, td{ padding:10px 8px; border-bottom:1px solid var(--ring); font-size:14px; white-space:nowrap; text-align:left }
@@ -98,7 +101,6 @@
       </div>
     </div>
 
-    <!-- Filtros -->
     <div class="filters">
       <div class="card">
         <form method="get" action="{{ url_for('arenera_history') }}">
@@ -113,7 +115,7 @@
             </div>
             <div class="grow">
               <label>Buscar</label>
-              <input class="in" type="text" name="search" placeholder="Chofer / DNI / patente / transportista" value="{{ search or '' }}">
+              <input class="in" type="text" name="search" placeholder="#ID, Chofer, DNI, Remito..." value="{{ search or '' }}">
             </div>
             <div>
               <label>&nbsp;</label>
@@ -139,18 +141,25 @@
       </div>
     </div>
 
-    <!-- Cards (móvil) -->
     <div class="list">
       {% if shipments %}
         {% for s in shipments %}
         <div class="item">
           <div class="band {{ 'ok' if s.status=='Llego' else ('warn' if s.status=='En viaje' else 'bad') }}"></div>
           <div>
-            <div class="title">{{ s.chofer }} · DNI {{ s.dni }}</div>
+            <div class="title">
+              <span class="id-badge">#{{ s.id }}</span>
+              {{ s.chofer }} · DNI {{ s.dni }}
+            </div>
             <div class="meta">
               {{ s.date.strftime('%d/%m/%Y') if s.date else s.date }} · {{ s.transportista.username if s.transportista else '—' }} · {{ s.tipo }}
               · Tractor: {{ s.tractor }} · Batea: {{ s.trailer }}
             </div>
+            {% if s.remito_arenera or s.peso_neto_arenera %}
+            <div class="meta" style="color:var(--ink); font-weight:500;">
+              Remito: {{ s.remito_arenera or '—' }} | Tn: {{ ('%.2f' % s.peso_neto_arenera).replace('.', ',') if s.peso_neto_arenera else '—' }}
+            </div>
+            {% endif %}
           </div>
           <div>
             {% if s.status == 'Llego' %}
@@ -168,37 +177,38 @@
       {% endif %}
     </div>
 
-    <!-- Tabla (desktop) -->
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Fecha</th>
+            <th>ID</th> <th>Fecha</th>
             <th>Transportista</th>
             <th>Chofer</th>
             <th>DNI</th>
             <th>Tractor</th>
             <th>Batea</th>
-            <th>Tipo</th>
-            <th class="center">Estado</th>
+            <th>Remito</th> <th>Tn</th>     <th class="center">Estado</th>
           </tr>
         </thead>
         <tbody>
           {% for s in shipments %}
           <tr>
+            <td><strong style="color:var(--brand-2);">#{{ s.id }}</strong></td>
             <td>{{ s.date.strftime('%d/%m/%Y') if s.date else s.date }}</td>
             <td>{{ s.transportista.username if s.transportista else '—' }}</td>
             <td>{{ s.chofer }}</td>
             <td>{{ s.dni }}</td>
             <td>{{ s.tractor }}</td>
             <td>{{ s.trailer }}</td>
-            <td>{{ s.tipo }}</td>
+            <td>{{ s.remito_arenera or '—' }}</td>
+            <td>{{ ('%.2f' % s.peso_neto_arenera).replace('.', ',') if s.peso_neto_arenera else '—' }}</td>
             <td>
               {% if s.status == 'Llego' %}
                 <span class="pill ok">Llegó</span>
                 <form method="post"
                       action="{{ url_for('arenera_update', shipment_id=s.id) }}"
-                      style="display:inline-block; margin-left:8px">
+                      style="display:inline-block; margin-left:8px"
+                      onsubmit="return confirm('¿Volver a estado En Viaje?');">
                   <input type="hidden" name="status" value="En viaje">
                   <button type="submit" class="btn-sm outline" title="Marcar como En viaje">↩️</button>
                 </form>
@@ -214,7 +224,6 @@
 
   </div>
 
-  <!-- Navbar inferior igual al resto -->
   <nav class="nav" style="position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring); display:flex; justify-content:space-around; padding:8px 10px; z-index:10;">
     <a href="{{ url_for('arenera_panel') }}" style="flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700; padding:10px 8px; border-radius:10px;">Inicio</a>
     <a href="{{ url_for('arenera_history') }}" class="active" style="flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700; padding:10px 8px; border-radius:10px; background:#eef2ff;">Historial</a>

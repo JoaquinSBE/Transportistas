@@ -27,6 +27,13 @@
       text-decoration:none; font-weight:600;
     }
 
+    /* flashes */
+    .flashes{ margin-bottom:16px; display:flex; flex-direction:column; gap:8px; }
+    .flash{ padding:12px 14px; border-radius:12px; font-size:14px; font-weight:600; border:1px solid transparent; }
+    .flash.success{ background:#e9f9f2; color:#0d7a5a; border-color:#cfeee1; }
+    .flash.error{ background:#ffe4e4; color:#8a1a1a; border-color:#f7c2c2; }
+
+
     /* cards y listas */
     .card{
       background:var(--card); border-radius:var(--radius);
@@ -34,10 +41,18 @@
       margin-top:12px; padding:12px;
     }
     .kpis{ display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
-    .kpi{ background:#fafbff; border:1px solid var(--ring); border-radius:12px; padding:10px; text-align:center; }
+    .kpi{ 
+      background:#fafbff; border:1px solid var(--ring); border-radius:12px; padding:10px; text-align:center;
+      transition: all 0.2s;
+    }
+    .kpi:hover{ opacity:0.9; }
     .kpi .tag{ font-size:11px; color:var(--muted); }
     .kpi .val{ font-size:22px; font-weight:800; margin-top:2px; }
-    .kpi.ok  .val{ color:#0d7a5a } .kpi.warn .val{ color:#8a5a07 } .kpi.bad .val{ color:#8a1a1a }
+    .kpi.ok  .val{ color:#0d7a5a } 
+    .kpi.warn .val{ color:#8a5a07 } 
+    .kpi.link{ background:var(--brand-2); color:white; border-color:var(--brand-2); text-decoration:none; }
+    .kpi.link .tag{ color:white; opacity:0.8; }
+    .kpi.link .val{ color:white; }
 
     .sec-h{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
     .sec-h h2{ margin:0; font-size:16px; }
@@ -111,7 +126,6 @@
 </head>
 <body>
   <div class="wrap">
-    <!-- Header -->
     <div class="top">
       <div class="hello">
         <h1>Hola, {{ user.username }}</h1>
@@ -122,8 +136,17 @@
         <a class="btn-sm"   href="{{ url_for('logout') }}">Cerrar sesión</a>
       </div>
     </div>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for category, message in messages %}
+            <div class="flash {{ 'success' if category in ['success','ok'] else 'error' }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
 
-    <!-- KPIs del día -->
     <div class="card">
       <div class="kpis">
         <div class="kpi warn">
@@ -134,13 +157,16 @@
           <div class="tag">Llegados</div>
           <div class="val">{{ stats.llegados }}</div>
         </div>
+        <a class="kpi link" href="{{ url_for('transportista_choferes') }}" style="text-align:center;">
+          <div class="tag">Mis Choferes</div>
+          <div class="val">{{ choferes|length }}</div>
+        </a>
       </div>
       <div class="sub" style="margin-top:6px;">
       Muestra los datos de la Semana: {{ stats.week_from.strftime('%d/%m') }} al {{ stats.week_to.strftime('%d/%m') }}
       </div>
     </div>
 
-    <!-- Cupos de hoy -->
     <div class="card">
       <div class="sec-h">
         <h2>Tus cupos de hoy</h2>
@@ -171,7 +197,6 @@
       {% endif %}
     </div>
 
-    <!-- Viajes de hoy -->
     <div class="card">
       <div class="sec-h"><h2>Mis viajes</h2></div>
       <div class="search">
@@ -211,10 +236,10 @@
     </div>
   </div>
 
-  <!-- Navbar inferior -->
   <nav class="nav">
     <a class="active" href="{{ url_for('transportista_panel') }}">Inicio</a>
     <a href="{{ url_for('transportista_quotas') }}">Cuotas</a>
+    <a href="{{ url_for('transportista_history') }}">Historial</a>
   </nav>
 
   <script>
@@ -234,4 +259,3 @@
   </script>
 </body>
 </html>
-

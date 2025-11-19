@@ -70,7 +70,6 @@
 </head>
 <body>
   <div class="wrap">
-    <!-- Header -->
     <div class="top">
       <div class="hello">
         <h1>{{ assignment.arenera.username }}</h1>
@@ -78,8 +77,20 @@
       </div>
       <a class="btn-sm" href="{{ url_for('transportista_panel') }}">Volver</a>
     </div>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes" style="margin-top:10px;">
+          {% for category, message in messages %}
+            <div class="flash {{ 'success' if category in ['success','ok'] else 'error' }}" 
+                 style="padding:12px 14px; border-radius:12px; font-size:14px; font-weight:600; border:1px solid transparent; cursor:pointer;">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
 
-    <!-- Cupo -->
     {% set used = used or 0 %}
     {% set lim  = limit or 0 %}
     {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
@@ -91,33 +102,32 @@
       <div class="bar"><span style="width:{{ pct }}%"></span></div>
     </div>
 
-    <!-- Formulario -->
     <div class="card">
       <div class="sec-h"><h2>Cargar viaje</h2></div>
       <form method="post" action="">
         <div class="row">
           <div>
-            <label>Nombre y apellido del chofer</label>
-            <input class="in" type="text" name="nombre_apellido" placeholder="Juan Pérez" required>
+            <label>DNI</label>
+            <input class="in" type="text" name="dni" id="dni-input" inputmode="numeric" pattern="[0-9]*" placeholder="44554990" required>
           </div>
           <div>
-            <label>DNI</label>
-            <input class="in" type="text" name="dni" inputmode="numeric" pattern="[0-9]*" placeholder="44554990" required>
+            <label>Nombre y apellido del chofer</label>
+            <input class="in" type="text" name="nombre_apellido" id="nombre-input" placeholder="Juan Pérez" required>
           </div>
         </div>
 
         <div class="row two">
           <div>
             <label>Género</label>
-            <div class="seg" data-name="gender">
+            <div class="seg" data-name="gender" id="gender-seg">
               <button type="button" data-val="M" class="active">M</button>
               <button type="button" data-val="F">F</button>
             </div>
-            <input type="hidden" name="gender" value="M">
+            <input type="hidden" name="gender" value="M" id="gender-input">
           </div>
           <div>
             <label>Tipo</label>
-            <select class="in" name="tipo" required>
+            <select class="in" name="tipo" id="tipo-select" required>
               <option value="">Tipo…</option>
               <option value="Batea">Batea</option>
               <option value="Bivuelco">Bivuelco</option>
@@ -128,11 +138,11 @@
         <div class="row two">
           <div>
             <label>Patente tractor</label>
-            <input class="in pat" type="text" name="patente_tractor" placeholder="AA123BB" required>
+            <input class="in pat" type="text" name="patente_tractor" id="tractor-input" placeholder="AA123BB" required>
           </div>
           <div>
             <label>Patente batea</label>
-            <input class="in pat" type="text" name="patente_batea" placeholder="AB123CD" required>
+            <input class="in pat" type="text" name="patente_batea" id="trailer-input" placeholder="AB123CD" required>
           </div>
         </div>
 
@@ -144,7 +154,6 @@
       </form>
     </div>
 
-    <!-- Mis viajes de hoy -->
     <div class="card">
       <div class="sec-h"><h2>Mis viajes de hoy</h2></div>
       {% if shipments and shipments|length %}
@@ -179,25 +188,102 @@
     </div>
   </div>
 
-  <!-- Navbar inferior -->
   <nav class="nav">
     <a href="{{ url_for('transportista_panel') }}">Inicio</a>
     <a href="{{ url_for('transportista_quotas') }}">Cuotas</a>
+    <a href="{{ url_for('transportista_history') }}">Historial</a>
   </nav>
 
   <script>
-    // Segmented control (género)
-    document.querySelectorAll('.seg').forEach(seg=>{
-      const name = seg.getAttribute('data-name');
-      const hidden = seg.parentElement.querySelector('input[type="hidden"][name="'+name+'"]');
-      seg.addEventListener('click', e=>{
-        if(e.target.tagName !== 'BUTTON') return;
-        seg.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===e.target));
-        hidden.value = e.target.getAttribute('data-val');
-      });
+    // URL de la API (asumiendo que /api/choferes/mine ya existe en app.py)
+    const API_URL = '{{ url_for("api_choferes_mine") }}';
+    let choferes_data = {};
+
+    // --- Funciones del Segmented Control (Género) ---
+    function setupSegmentedControl(containerId, hiddenInputId) {
+        const seg = document.getElementById(containerId);
+        const hidden = document.getElementById(hiddenInputId);
+        
+        if (!seg || !hidden) return (val) => {};
+
+        function updateState(val) {
+            val = val || 'M';
+            seg.querySelectorAll('button').forEach(b => {
+                const isActive = b.getAttribute('data-val') === val;
+                b.classList.toggle('active', isActive);
+            });
+            hidden.value = val;
+        }
+
+        seg.addEventListener('click', e => {
+            if (e.target.tagName === 'BUTTON') {
+                updateState(e.target.getAttribute('data-val'));
+            }
+        });
+        return updateState;
+    }
+
+    // --- Lógica de Autocompletado (AJAX) ---
+
+    // 1. Obtener y mapear datos de choferes
+    async function fetchChoferes() {
+        try {
+            const response = await fetch(API_URL);
+            if (!response.ok) throw new Error('Error de red al obtener choferes.');
+            const data = await response.json();
+            
+            // Mapeamos los datos por DNI para acceso rápido
+            data.forEach(c => {
+                choferes_data[c.dni] = c;
+            });
+        } catch (error) {
+            console.error("Error al obtener la lista de choferes:", error);
+        }
+    }
+
+    // 2. Inicializar controles y fetch de datos
+    const updateGender = setupSegmentedControl('gender-seg', 'gender-input');
+
+    const dniInput = document.getElementById('dni-input');
+    const nombreInput = document.getElementById('nombre-input');
+    const tractorInput = document.getElementById('tractor-input');
+    const trailerInput = document.getElementById('trailer-input');
+    const tipoSelect = document.getElementById('tipo-select');
+
+    // Cargar la lista de choferes al cargar la página
+    fetchChoferes();
+
+
+    // 3. Listener principal para el autocompletado
+    dniInput.addEventListener('input', function() {
+        const dni = this.value.trim();
+        const chofer = choferes_data[dni];
+
+        if (chofer) {
+            // Rellenar campos
+            nombreInput.value = chofer.nombre;
+            tractorInput.value = (chofer.tractor || '').toUpperCase();
+            trailerInput.value = (chofer.trailer || '').toUpperCase();
+            
+            // Si el tipo existe en el select, lo seleccionamos; si no, queda en "Tipo..."
+            tipoSelect.value = chofer.tipo || ''; 
+            
+            // Actualiza los botones M/F
+            updateGender(chofer.gender);
+            
+            // Movemos el foco para indicar que se complete
+            nombreInput.focus(); 
+        } else {
+            // Limpiar si el DNI no coincide
+            nombreInput.value = '';
+            tractorInput.value = '';
+            trailerInput.value = '';
+            tipoSelect.value = ''; // Limpiar el tipo
+            updateGender('M'); // Resetear género
+        }
     });
 
-    // Patentes: mayúsculas, sin espacios
+    // 4. Patentes: mayúsculas, sin espacios
     document.querySelectorAll('.pat').forEach(inp=>{
       inp.addEventListener('input', ()=>{ inp.value = (inp.value || '').toUpperCase().replace(/\s+/g,''); });
     });

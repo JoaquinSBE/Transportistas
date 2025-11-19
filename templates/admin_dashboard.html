@@ -34,25 +34,21 @@
     .card-h h3{ margin:0; font-size:18px }
     .card-b{ padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
     .grid{ display:grid; gap:16px }
-    .grid-kpi{ grid-template-columns:repeat(3,1fr); }
+    .grid-kpi{ grid-template-columns:repeat(2,1fr); }
     .grid-bottom{ grid-template-columns:1fr 1fr; }
     @media (max-width:1000px){ .grid-kpi,.grid-bottom{ grid-template-columns:1fr 1fr } }
     @media (max-width:640px){ .grid-kpi{ grid-template-columns:1fr } .grid-bottom{ grid-template-columns:1fr } }
     .kpi{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    text-align:center;
-    gap:2px;                 /* espacio entre label, valor y pill */
-    min-height:flex;         /* da aire dentro de la tarjeta */
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      gap:2px;
+      min-height:flex;
     }
     .kpi .label{ font-size:12px; color:var(--muted) }
     .kpi .value{ font-size:28px; font-weight:700 }
-    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .pill.ok{ background:#e9f9f2; color:#0d7a5a }
-    .pill.warn{ background:#fff3d6; color:#8a5a07 }
-    .pill.bad{ background:#ffe4e4; color:#8a1a1a }
 
     /* toolbar filtros */
     .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
@@ -108,7 +104,11 @@
             <label for="to">Hasta</label>
             <input id="to" type="date" class="in" disabled>
           </div>
-          <button id="apply" class="btn">Aplicar</button>
+          <div class="field">
+            <label>Transportista</label>
+            <input id="tname" class="in" type="text" placeholder="usuario…">
+          </div>
+          <button id="apply" class="btn" type="button">Aplicar</button>
         </div>
       </div>
     </div>
@@ -135,16 +135,6 @@
           </div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-b">
-          <div class="kpi">
-            <div>
-              <div class="label">Llegados</div>
-              <div class="value" id="k_lleg">0</div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- Serie temporal -->
@@ -163,7 +153,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>Arenera</th><th>Total</th><th>En viaje</th><th>Llegados</th><th></th></tr>
+                <tr><th>Arenera</th><th>Total</th><th>En viaje</th></tr>
               </thead>
               <tbody id="tb_arenera"></tbody>
             </table>
@@ -177,7 +167,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>Transportista</th><th>Total</th><th>En viaje</th><th>Llegados</th><th></th></tr>
+                <tr><th>Transportista</th><th>Total</th><th>En viaje</th></tr>
               </thead>
               <tbody id="tb_transp"></tbody>
             </table>
@@ -188,10 +178,6 @@
     </div>
   </div>
 <script>
-  const COLORS = {
-  lleg: { line: '#10b981', fill: 'rgba(16,185,129,.15)' },   // verde
-  viaje:{ line: '#f59e0b', fill: 'rgba(245,158,11,.15)' },   // naranja
-  };
 let chart = null;
 
 function enableCustomDates(on){
@@ -205,28 +191,36 @@ document.getElementById('range').addEventListener('change', e=>{
 
 document.getElementById('apply').addEventListener('click', loadData);
 
-async function loadData(){
+function collectFilters(){
   const range = document.getElementById('range').value;
-  const body  = {};
-  if(range === 'custom'){
-    const f = document.getElementById('from').value;
-    const t = document.getElementById('to').value;
-    if(f && t){ body.from = f; body.to = t; }
+  const from  = document.getElementById('from').value;
+  const to    = document.getElementById('to').value;
+  const tname = document.getElementById('tname').value.trim().toLowerCase();
+
+  const body = { transportista: tname };
+  if (range === 'custom') {
+    if (from) body.from = from;
+    if (to)   body.to   = to;
   } else {
     body.range = range;
   }
+  return body;
+}
+
+async function loadData(){
+  const body = collectFilters();
 
   const rsp = await fetch('{{ url_for("admin_dashboard_data") }}', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
     body: JSON.stringify(body)
   });
   const d = await rsp.json();
 
   // KPIs
   const k = d.kpi || {};
-  document.getElementById('k_total').textContent = k.total ?? 0;
-  document.getElementById('k_viaje').textContent = k.en_viaje ?? 0;
-  document.getElementById('k_lleg').textContent  = k.llegados ?? 0;
+  document.getElementById('k_total').textContent  = k.total ?? 0;
+  document.getElementById('k_viaje').textContent  = k.en_viaje ?? 0;
   document.getElementById('lblRango').textContent = k.rango ? `${k.rango.from} al ${k.rango.to}` : '—';
 
   // Tablas
@@ -237,6 +231,7 @@ async function loadData(){
   document.getElementById('na_arenera').style.display = ar.length ? 'none' : 'block';
   ar.forEach(r=>{
     const row = document.createElement('tr');
+    row.innerHTML = `<td>${r.arenera}</td><td style="text-align:right;">${r.total}</td><td style="text-align:right;">${r.en_viaje}</td>`;
     tA.appendChild(row);
   });
 
@@ -244,52 +239,44 @@ async function loadData(){
   document.getElementById('na_transp').style.display = tr.length ? 'none' : 'block';
   tr.forEach(r=>{
     const row = document.createElement('tr');
+    row.innerHTML = `<td>${r.transportista}</td><td style="text-align:right;">${r.total}</td><td style="text-align:right;">${r.en_viaje}</td>`;
     tT.appendChild(row);
   });
 
-  // Serie temporal
-  const labels = (d.timeline && d.timeline.labels) || [];
-  const lleg   = (d.timeline && d.timeline.llegados) || [];
-  const viaje  = (d.timeline && d.timeline.en_viaje) || [];
+  // Serie temporal (solo En viaje)
+  const timeline = d.timeline || {};
+  const labels = timeline.labels || [];
+  const viaje  = timeline.en_viaje || [];
 
   const ctx = document.getElementById('series').getContext('2d');
-  if(chart) chart.destroy();
+  if (chart) chart.destroy();
   chart = new Chart(ctx, {
     type:'line',
     data:{
       labels,
       datasets:[
         {
-          label:'Llegados',
-          data:lleg,
-          borderColor: COLORS.lleg.line,
-          backgroundColor: COLORS.lleg.fill,
-          pointBackgroundColor: COLORS.lleg.line,
-          tension:.25, pointRadius:4, fill:false
-        },
-        {
           label:'En viaje',
           data:viaje,
-          borderColor: COLORS.viaje.line,
-          backgroundColor: COLORS.viaje.fill,
-          pointBackgroundColor: COLORS.viaje.line,
-          tension:.25, pointRadius:4, fill:false
-        },
-        {
-          label:'',
-          tension:.25, pointRadius:4, fill:false
+          borderColor:'#f59e0b',
+          backgroundColor:'rgba(245,158,11,.15)',
+          pointBackgroundColor:'#f59e0b',
+          tension:.25,
+          pointRadius:4,
+          fill:false
         }
       ]
     },
     options:{
-      responsive:true, maintainAspectRatio:false,
+      responsive:true,
+      maintainAspectRatio:false,
       scales:{ y:{ beginAtZero:true } },
       plugins:{ legend:{ position:'bottom' } }
     }
   });
 }
 
-// init: rango "hoy"
+// init
 enableCustomDates(false);
 loadData();
 </script>

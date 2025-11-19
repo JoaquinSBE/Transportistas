@@ -13,10 +13,10 @@
     *{ box-sizing:border-box }
     html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; -webkit-text-size-adjust:100%; }
-    .wrap{ max-width:900px; margin:0 auto; padding:16px 12px 90px; }
+    .wrap{ max-width:950px; margin:0 auto; padding:16px 12px 90px; }
 
-    /* header */
-    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    /* --- Header --- */
+    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom: 12px; }
     .hello h1{ margin:0; font-size:18px }
     .hello .sub{ color:var(--muted); font-size:12px }
     .btn, .btn-sm, .btn-icon{
@@ -27,31 +27,140 @@
     .btn-icon{ display:inline-flex; align-items:center; justify-content:center; min-width:44px; padding:8px 10px }
     .btn.outline{ background:#fff; color:var(--brand-2) }
 
-    /* filtros sticky */
+    /* --- Mensajes Flash --- */
+    .flashes{ margin-bottom:16px; display:flex; flex-direction:column; gap:8px; }
+    .flash{
+      padding:12px 14px; border-radius:12px; font-size:14px; font-weight:600;
+      border:1px solid transparent; cursor:pointer;
+      animation: fadeIn 0.3s ease-out;
+    }
+    .flash.success{ background:#e9f9f2; color:#0d7a5a; border-color:#cfeee1; }
+    .flash.error{ background:#ffe4e4; color:#8a1a1a; border-color:#f7c2c2; }
+    .flash.info{ background:#eef2ff; color:#1e3a8a; border-color:#d8defe; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:translateY(0); } }
+
+    /* --- Filtros --- */
     .filters{
-      position:sticky; top:0; z-index:5; padding:8px 0 0; margin-top:12px;
+      position:sticky; top:0; z-index:5; padding:8px 0 0; margin-bottom:12px;
       background:linear-gradient(#f5f7fb 60%, rgba(245,247,251,.9));
       border-bottom:1px solid var(--ring);
     }
     .card{ background:var(--card); border-radius:var(--radius); border:1px solid var(--ring); box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04); padding:10px }
-    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    .chip{ padding:8px 12px; border-radius:999px; border:1px solid var(--ring); background:#fff; color:var(--ink); font-weight:700; text-decoration:none }
-    .chip.active{ border-color:var(--brand-2); box-shadow:0 0 0 3px rgba(37,99,235,.15) }
     .in{ flex:1; min-width:220px; min-height:40px; padding:10px 12px; border-radius:12px; border:1px solid var(--ring); background:#fff; color:var(--ink) }
+    
+    /* --- Lista de Tarjetas --- */
+    .list{ display:flex; flex-direction:column; gap:10px }
 
-    /* lista compacta con banda lateral por estado */
-    .list{ margin-top:12px; display:flex; flex-direction:column; gap:10px }
-    .item{ display:grid; grid-template-columns:8px 1fr auto; gap:10px; align-items:center; background:#fff; border:1px solid var(--ring); border-radius:14px; padding:10px }
-    .band.ok{ background:#10b981 } .band.warn{ background:#f59e0b } .band.bad{ background:#ef4444 }
-    .title{ font-weight:800; }
-    .meta{ color:var(--muted); font-size:12px; margin-top:2px }
-    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .pill.ok{ background:#e9f9f2; color:#0d7a5a; border:1px solid #cfeee1 }
-    .pill.warn{ background:#fff3d6; color:#8a5a07; border:1px solid #ffe7a3 }
-    .pill.bad{ background:#ffe4e4; color:#8a1a1a; border:1px solid #f7c2c2 }
-    .actions{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end }
-    .icon{ border:1px solid var(--ring); background:#fff; color:var(--brand-2); border-radius:10px; padding:8px 10px; font-weight:800; text-decoration:none }
-    .icon.red{ color:#ef4444; border-color:#f7c2c2 }
+    /* Tarjeta Individual (Diseño Nuevo) */
+    .item {
+      background: #fff;
+      border: 1px solid var(--ring);
+      border-radius: 14px;
+      padding: 12px;
+      /* Layout Desktop: Banda | Info | Acciones */
+      display: grid;
+      grid-template-columns: 6px 1fr auto; 
+      gap: 12px;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    /* Banda lateral de color */
+    .band { height: 100%; border-radius: 4px; }
+    .band.ok { background: var(--ok); }
+    .band.warn { background: var(--warn); }
+    .band.bad { background: var(--bad); }
+
+    /* Info del viaje */
+    .info { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+    .title { font-weight: 800; font-size: 15px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meta { color: var(--muted); font-size: 13px; margin-top: 4px; line-height: 1.4; }
+
+    /* Formulario de acciones */
+    .actions form {
+      display: flex;
+      align-items: flex-end; /* Alinea los inputs y el botón abajo */
+      gap: 8px;
+    }
+
+    /* Campos pequeños (Remito / Tn) */
+    .field-mini {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .field-mini label {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--muted);
+      margin-left: 2px;
+    }
+    .input-mini {
+      width: 100px; /* Ancho fijo escritorio */
+      height: 38px;
+      padding: 0 10px;
+      border-radius: 8px;
+      border: 1px solid var(--ring);
+      background: #fff;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .input-mini:focus { outline: none; border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+
+    /* Botón de acción integrado */
+    .btn-action {
+      height: 38px;
+      padding: 0 16px;
+      border-radius: 8px;
+      border: 1px solid var(--ring);
+      background: #fff;
+      color: var(--brand-2);
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+    .btn-action:hover { background: #f0f7ff; border-color: var(--brand-2); }
+    .btn-action.red { color: #ef4444; }
+    .btn-action.red:hover { background: #fff5f5; border-color: #ef4444; }
+
+    /* --- Responsive (Móvil) --- */
+    @media (max-width: 768px) {
+      .item {
+        /* En móvil pasamos a columna */
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        padding-left: 18px; /* Espacio para la banda absoluta */
+      }
+      .item > .band {
+        position: absolute; left: 0; top: 0; bottom: 0;
+        width: 6px; border-radius: 14px 0 0 14px;
+      }
+      .actions {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #f1f5f9;
+      }
+      .actions form {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto; /* Remito | Peso | Botón */
+      }
+      .input-mini { width: 100%; }
+      .title { white-space: normal; } /* Permitir que el título baje de línea */
+    }
+
+    /* Navbar inferior */
     .nav{ position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring); display:flex; justify-content:space-around; padding:8px 10px; z-index:10 }
     .nav a{ flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700; padding:10px 8px; border-radius:10px }
     .nav a.active{ background:#eef2ff }
@@ -64,19 +173,31 @@
         <h1>Arenera</h1>
         <div class="sub">{{ user.username }}</div>
       </div>
-      <div class="row">
+      <div class="row" style="display:flex; gap:8px;">
         <a class="btn-icon" href="{{ url_for('change_password') }}" title="Ajustes">⚙️</a>
         <a class="btn-sm" href="{{ url_for('logout') }}">Cerrar sesión</a>
       </div>
     </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes" id="flash-container">
+          {% for category, message in messages %}
+            <div class="flash {{ 'success' if category in ['success','ok'] else ('error' if category in ['error','danger'] else 'info') }}" role="alert">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
 
     <div class="filters">
       <div class="card">
         <form method="get" action="{{ url_for('arenera_panel') }}" style="display:flex; gap:8px;">
           <input type="hidden" name="status" value="En viaje">
           <input class="in" type="text" name="search"
-                placeholder="Buscar chofer / DNI / patente"
-                value="{{ search or '' }}">
+                 placeholder="Buscar: #ID, chofer, patente..."
+                 value="{{ search or '' }}">
           <button class="btn" type="submit">Buscar</button>
         </form>
       </div>
@@ -87,27 +208,60 @@
         {% for s in shipments %}
         <div class="item">
           <div class="band {{ 'ok' if s.status=='Llego' else ('warn' if s.status=='En viaje' else 'bad') }}"></div>
-          <div>
+          
+          <div class="info">
             <div class="title">{{ s.chofer }} · {{ s.dni }}</div>
-            <div class="meta">{{ s.date.strftime('%d/%m/%Y') if s.date else s.date }} · {{ s.tipo }} · Tractor: {{ s.tractor }} · Batea: {{ s.trailer }}</div>
-          </div>
-          <div class="actions">
-            {% if s.status == 'Llego' %}
-              <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}">
-                <input type="hidden" name="status" value="En viaje">
-                <button type="submit" class="icon">↩️ En viaje</button>
-              </form>
-            {% elif s.status == 'En viaje' %}
-              <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}">
-                <input type="hidden" name="status" value="Llego">
-                <button type="submit" class="icon">Llegó</button>
-              </form>
+            <div class="meta">
+              {{ s.date.strftime('%d/%m') }} · {{ s.tipo }} · {{ s.tractor }} / {{ s.trailer }}
+            </div>
+            {% if s.remito_arenera or s.peso_neto_arenera %}
+            <div class="meta" style="color:var(--ink); font-weight:600; margin-top:6px;">
+              Remito: {{ s.remito_arenera or '--' }} &nbsp; {{ ('%.2f' % s.peso_neto_arenera).replace('.', ',') if s.peso_neto_arenera else '--' }} Tn
+            </div>
             {% endif %}
+          </div>
+
+          <div class="actions">
+            <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}">
+              
+              <div class="field-mini">
+                <label>Remito</label>
+                <input 
+                  type="text" 
+                  name="remito_arenera" 
+                  class="input-mini" 
+                  placeholder="N°" 
+                  value="{{ s.remito_arenera or '' }}"
+                  inputmode="numeric">
+              </div>
+
+              <div class="field-mini">
+                <label>Tn</label>
+                <input 
+                  type="text" 
+                  name="peso_neto_arenera" 
+                  class="input-mini" 
+                  placeholder="" 
+                  value="{{ s.peso_neto_arenera if s.peso_neto_arenera is not none else '' }}"
+                  inputmode="decimal">
+              </div>
+
+              {% if s.status == 'Llego' %}
+                <input type="hidden" name="status" value="En viaje">
+                <button type="submit" class="btn-action red" title="Cancelar llegada">↩️</button>
+              {% else %}
+                <input type="hidden" name="status" value="Llego">
+                <button type="submit" class="btn-action">Llegó</button>
+              {% endif %}
+
+            </form>
           </div>
         </div>
         {% endfor %}
       {% else %}
-        <div class="card" style="text-align:center; color:var(--muted);">No hay envíos en camino.</div>
+        <div class="card" style="text-align:center; color:var(--muted); padding:20px;">
+          No hay envíos en camino con ese criterio.
+        </div>
       {% endif %}
     </div>
   </div>
@@ -116,5 +270,17 @@
     <a class="active" href="{{ url_for('arenera_panel') }}">Inicio</a>
     <a href="{{ url_for('arenera_history') }}">Historial</a>
   </nav>
+
+  <script>
+    // Auto-ocultar mensajes flash despues de 5s
+    setTimeout(function(){
+      var f = document.getElementById('flash-container');
+      if(f) f.style.display = 'none';
+    }, 5000);
+    // Ocultar al hacer clic
+    document.querySelectorAll('.flash').forEach(function(el){
+      el.addEventListener('click', function(){ this.style.display='none'; });
+    });
+  </script>
 </body>
 </html>

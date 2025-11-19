@@ -13,5 +13,6 @@ venv/
 Data/*.log
 camiones.db
 *.sqlite3
-
+docker-compose.yml
+pgdata-dev/
 # logearse: gh auth login
