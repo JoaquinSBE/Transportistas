@@ -1,286 +1,394 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
-  <title>Arenera</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Recepción | Arenera</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
   <style>
-    :root{
-      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
-      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
-      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --bottom-nav-height: 70px;
     }
-    *{ box-sizing:border-box }
-    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; -webkit-text-size-adjust:100%; }
-    .wrap{ max-width:950px; margin:0 auto; padding:16px 12px 90px; }
 
-    /* --- Header --- */
-    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom: 12px; }
-    .hello h1{ margin:0; font-size:18px }
-    .hello .sub{ color:var(--muted); font-size:12px }
-    .btn, .btn-sm, .btn-icon{
-      border:1px solid var(--brand-2); color:#fff; background:var(--brand-2);
-      border-radius:12px; padding:10px 12px; font-weight:800; text-decoration:none;
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: calc(var(--bottom-nav-height) + 20px);
     }
-    .btn-sm{ padding:8px 10px }
-    .btn-icon{ display:inline-flex; align-items:center; justify-content:center; min-width:44px; padding:8px 10px }
-    .btn.outline{ background:#fff; color:var(--brand-2) }
 
-    /* --- Mensajes Flash --- */
-    .flashes{ margin-bottom:16px; display:flex; flex-direction:column; gap:8px; }
-    .flash{
-      padding:12px 14px; border-radius:12px; font-size:14px; font-weight:600;
-      border:1px solid transparent; cursor:pointer;
-      animation: fadeIn 0.3s ease-out;
+    @media (min-width: 768px) {
+      body { padding-bottom: 40px; }
     }
-    .flash.success{ background:#e9f9f2; color:#0d7a5a; border-color:#cfeee1; }
-    .flash.error{ background:#ffe4e4; color:#8a1a1a; border-color:#f7c2c2; }
-    .flash.info{ background:#eef2ff; color:#1e3a8a; border-color:#d8defe; }
-    @keyframes fadeIn { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:translateY(0); } }
 
-    /* --- Filtros --- */
-    .filters{
-      position:sticky; top:0; z-index:5; padding:8px 0 0; margin-bottom:12px;
-      background:linear-gradient(#f5f7fb 60%, rgba(245,247,251,.9));
-      border-bottom:1px solid var(--ring);
+    /* --- TOP NAV --- */
+    .top-nav {
+      background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0.8rem 0;
+      display: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    .card{ background:var(--card); border-radius:var(--radius); border:1px solid var(--ring); box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04); padding:10px }
-    .in{ flex:1; min-width:220px; min-height:40px; padding:10px 12px; border-radius:12px; border:1px solid var(--ring); background:#fff; color:var(--ink) }
+    @media (min-width: 768px) { .top-nav { display: block; } }
+
+    /* --- BOTTOM NAV --- */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: var(--bottom-nav-height); background: #fff; border-top: 1px solid #e5e7eb;
+      display: flex; justify-content: space-around; align-items: center;
+      z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
+    }
+    .nav-item-link {
+      display: flex; flex-direction: column; align-items: center;
+      text-decoration: none; color: #9ca3af; font-size: 0.75rem; font-weight: 500; transition: color 0.2s;
+    }
+    .nav-item-link i { font-size: 1.5rem; margin-bottom: 4px; }
+    .nav-item-link.active { color: var(--bs-primary); }
+    @media (min-width: 768px) { .bottom-nav { display: none; } }
+
+    /* --- SEARCH --- */
+    .sticky-search {
+      position: sticky; top: 0; z-index: 90;
+      background: rgba(243, 244, 246, 0.95); backdrop-filter: blur(5px);
+      padding: 10px 0; margin-bottom: 10px;
+    }
+
+    .form-control-dense {
+      font-size: 0.9rem; padding: 0.4rem 0.6rem; border-radius: 6px;
+      border-color: #d1d5db; text-align: center; font-weight: 600;
+    }
+    .form-control-dense:focus { border-color: var(--bs-primary); box-shadow: 0 0 0 2px rgba(37,99,235,0.1); }
+
+    /* --- MOB CARD --- */
+    .mob-card {
+      background: #fff; border-radius: 12px;
+      margin-bottom: 12px; padding: 15px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+      border: 1px solid #e5e7eb;
+      position: relative; overflow: hidden;
+    }
+    .mob-card::before {
+        content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 4px;
+    }
+    .st-viaje::before { background: #f59e0b; } 
+    .st-salio::before { background: #10b981; } 
+    .st-llego::before { background: #6b7280; } 
+
+    .mob-head {
+      display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;
+    }
+    .mob-title { font-weight: 700; color: #1f2937; font-size: 1rem; line-height: 1.2; }
+    .mob-sub { font-size: 0.8rem; color: #6b7280; margin-top: 2px; }
+    .mob-badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 10px; font-weight: 700; text-transform: uppercase; }
     
-    /* --- Lista de Tarjetas --- */
-    .list{ display:flex; flex-direction:column; gap:10px }
+    .badge-viaje { background: #fffbeb; color: #b45309; border: 1px solid #fcd34d; }
+    .badge-salio { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
+    .badge-llego { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
 
-    /* Tarjeta Individual (Diseño Nuevo) */
-    .item {
-      background: #fff;
-      border: 1px solid var(--ring);
-      border-radius: 14px;
-      padding: 12px;
-      /* Layout Desktop: Banda | Info | Acciones */
-      display: grid;
-      grid-template-columns: 6px 1fr auto; 
-      gap: 12px;
-      align-items: center;
-      position: relative;
-      overflow: hidden;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    /* --- DESKTOP TABLE --- */
+    .card-table {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; 
+      box-shadow: 0 2px 5px rgba(0,0,0,0.03); overflow: hidden;
     }
-
-    /* Banda lateral de color */
-    .band { height: 100%; border-radius: 4px; }
-    .band.ok { background: var(--ok); }
-    .band.warn { background: var(--warn); }
-    .band.bad { background: var(--bad); }
-
-    /* Info del viaje */
-    .info { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-    .title { font-weight: 800; font-size: 15px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .meta { color: var(--muted); font-size: 13px; margin-top: 4px; line-height: 1.4; }
-
-    /* Formulario de acciones */
-    .actions form {
-      display: flex;
-      align-items: flex-end; /* Alinea los inputs y el botón abajo */
-      gap: 8px;
+    .table-custom th {
+      font-size: 0.75rem; text-transform: uppercase; color: #64748b; background: #f9fafb;
+      padding: 12px 16px; border-bottom: 1px solid #e5e7eb; font-weight: 700;
     }
+    .table-custom td {
+      font-size: 0.9rem; vertical-align: middle; padding: 10px 16px; color: #334155;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .table-custom tr:hover td { background-color: #f8fafc; }
 
-    /* Campos pequeños (Remito / Tn) */
-    .field-mini {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .field-mini label {
-      font-size: 10px;
-      text-transform: uppercase;
-      font-weight: 700;
-      color: var(--muted);
-      margin-left: 2px;
-    }
-    .input-mini {
-      width: 100px; /* Ancho fijo escritorio */
-      height: 38px;
-      padding: 0 10px;
-      border-radius: 8px;
-      border: 1px solid var(--ring);
-      background: #fff;
-      color: var(--ink);
-      font-size: 14px;
-      font-weight: 600;
-      text-align: center;
+    .btn-action {
+      border: 1px solid #e5e7eb; background: #fff; color: var(--bs-primary);
+      border-radius: 6px; padding: 6px 12px; font-weight: 700; font-size: 0.85rem;
       transition: all 0.2s;
     }
-    .input-mini:focus { outline: none; border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    .btn-action:hover { background: var(--bs-primary); color: #fff; border-color: var(--bs-primary); }
+    
+    .btn-undo { color: #ef4444; border-color: #fee2e2; background: #fff; }
+    .btn-undo:hover { background: #fee2e2; color: #b91c1c; }
 
-    /* Botón de acción integrado */
-    .btn-action {
-      height: 38px;
-      padding: 0 16px;
-      border-radius: 8px;
-      border: 1px solid var(--ring);
-      background: #fff;
-      color: var(--brand-2);
-      font-weight: 800;
-      font-size: 14px;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      white-space: nowrap;
-      transition: background 0.2s;
-    }
-    .btn-action:hover { background: #f0f7ff; border-color: var(--brand-2); }
-    .btn-action.red { color: #ef4444; }
-    .btn-action.red:hover { background: #fff5f5; border-color: #ef4444; }
-
-    /* --- Responsive (Móvil) --- */
-    @media (max-width: 768px) {
-      .item {
-        /* En móvil pasamos a columna */
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        padding-left: 18px; /* Espacio para la banda absoluta */
-      }
-      .item > .band {
-        position: absolute; left: 0; top: 0; bottom: 0;
-        width: 6px; border-radius: 14px 0 0 14px;
-      }
-      .actions {
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px solid #f1f5f9;
-      }
-      .actions form {
-        display: grid;
-        grid-template-columns: 1fr 1fr auto; /* Remito | Peso | Botón */
-      }
-      .input-mini { width: 100%; }
-      .title { white-space: normal; } /* Permitir que el título baje de línea */
-    }
-
-    /* Navbar inferior */
-    .nav{ position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring); display:flex; justify-content:space-around; padding:8px 10px; z-index:10 }
-    .nav a{ flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700; padding:10px 8px; border-radius:10px }
-    .nav a.active{ background:#eef2ff }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div class="hello">
-        <h1>Arenera</h1>
-        <div class="sub">{{ user.username }}</div>
-      </div>
-      <div class="row" style="display:flex; gap:8px;">
-        <a class="btn-icon" href="{{ url_for('change_password') }}" title="Ajustes">⚙️</a>
-        <a class="btn-sm" href="{{ url_for('logout') }}">Cerrar sesión</a>
-      </div>
-    </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flashes" id="flash-container">
-          {% for category, message in messages %}
-            <div class="flash {{ 'success' if category in ['success','ok'] else ('error' if category in ['error','danger'] else 'info') }}" role="alert">
-              {{ message }}
-            </div>
-          {% endfor %}
+  <div class="top-nav">
+    <div class="container-xl d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <h5 class="m-0 fw-bold text-dark"><i class="fa-solid fa-truck-ramp-box text-primary me-2"></i>Recepción</h5>
         </div>
-      {% endif %}
-    {% endwith %}
-
-    <div class="filters">
-      <div class="card">
-        <form method="get" action="{{ url_for('arenera_panel') }}" style="display:flex; gap:8px;">
-          <input type="hidden" name="status" value="En viaje">
-          <input class="in" type="text" name="search"
-                 placeholder="Buscar: #ID, chofer, patente..."
-                 value="{{ search or '' }}">
-          <button class="btn" type="submit">Buscar</button>
-        </form>
-      </div>
-    </div>
-
-    <div class="list">
-      {% if shipments %}
-        {% for s in shipments %}
-        <div class="item">
-          <div class="band {{ 'ok' if s.status=='Llego' else ('warn' if s.status=='En viaje' else 'bad') }}"></div>
-          
-          <div class="info">
-            <div class="title">{{ s.chofer }} · {{ s.dni }}</div>
-            <div class="meta">
-              {{ s.date.strftime('%d/%m') }} · {{ s.tipo }} · {{ s.tractor }} / {{ s.trailer }}
-            </div>
-            {% if s.remito_arenera or s.peso_neto_arenera %}
-            <div class="meta" style="color:var(--ink); font-weight:600; margin-top:6px;">
-              Remito: {{ s.remito_arenera or '--' }} &nbsp; {{ ('%.2f' % s.peso_neto_arenera).replace('.', ',') if s.peso_neto_arenera else '--' }} Tn
-            </div>
-            {% endif %}
-          </div>
-
-          <div class="actions">
-            <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}">
-              
-              <div class="field-mini">
-                <label>Remito</label>
-                <input 
-                  type="text" 
-                  name="remito_arenera" 
-                  class="input-mini" 
-                  placeholder="N°" 
-                  value="{{ s.remito_arenera or '' }}"
-                  inputmode="numeric">
-              </div>
-
-              <div class="field-mini">
-                <label>Tn</label>
-                <input 
-                  type="text" 
-                  name="peso_neto_arenera" 
-                  class="input-mini" 
-                  placeholder="" 
-                  value="{{ s.peso_neto_arenera if s.peso_neto_arenera is not none else '' }}"
-                  inputmode="decimal">
-              </div>
-
-              {% if s.status == 'Llego' %}
-                <input type="hidden" name="status" value="En viaje">
-                <button type="submit" class="btn-action red" title="Cancelar llegada">↩️</button>
-              {% else %}
-                <input type="hidden" name="status" value="Llego">
-                <button type="submit" class="btn-action">Llegó</button>
-              {% endif %}
-
-            </form>
-          </div>
+        <div class="d-flex gap-2">
+          <a href="{{ url_for('arenera_history') }}" class="btn btn-outline-primary btn-sm fw-medium">
+              <i class="fa-solid fa-clock-rotate-left me-1"></i> Historial
+          </a>
+          <a href="{{ url_for('change_password') }}" class="btn btn-sm text-secondary" title="Cambiar Contraseña">
+              <i class="fa-solid fa-gear fa-lg"></i>
+          </a>
+          <a href="{{ url_for('logout') }}" class="btn btn-sm text-danger fw-medium" title="Cerrar Sesión">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </a>
         </div>
-        {% endfor %}
-      {% else %}
-        <div class="card" style="text-align:center; color:var(--muted); padding:20px;">
-          No hay envíos en camino con ese criterio.
-        </div>
-      {% endif %}
     </div>
   </div>
 
-  <nav class="nav">
-    <a class="active" href="{{ url_for('arenera_panel') }}">Inicio</a>
-    <a href="{{ url_for('arenera_history') }}">Historial</a>
+  <div class="d-md-none px-3 pt-3 pb-2 d-flex justify-content-between align-items-center bg-body">
+      <div>
+        <h1 class="h5 fw-bold m-0">Recepción</h1>
+        <small class="text-muted">{{ user.username }}</small>
+      </div>
+      <div>
+          <a href="{{ url_for('change_password') }}" class="text-secondary me-3"><i class="fa-solid fa-gear"></i></a>
+          <a href="{{ url_for('logout') }}" class="text-danger"><i class="fa-solid fa-power-off"></i></a>
+      </div>
+  </div>
+
+  <div class="container-xl">
+
+    <div class="sticky-search">
+        <form method="get" action="{{ url_for('arenera_panel') }}">
+            <input type="hidden" name="status" value="En viaje">
+            
+            <div class="row g-2">
+                <div class="col-7 col-md-9">
+                    <div class="input-group input-group-sm shadow-sm">
+                        <span class="input-group-text bg-white border-end-0 ps-3"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                        <input type="text" name="search" class="form-control border-start-0" 
+                               placeholder="Patente, chofer..." value="{{ stats.search }}" autocomplete="off">
+                        {% if stats.search %}
+                            <a href="{{ url_for('arenera_panel') }}" class="btn btn-white border-top border-bottom border-end"><i class="fa-solid fa-xmark"></i></a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-5 col-md-3">
+                    <select name="trans_filter" class="form-select form-select-sm shadow-sm" onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        {% if active_transports %}
+                            {% for t in active_transports %}
+                                <option value="{{ t.id }}" {{ 'selected' if stats.trans_filter|string == t.id|string else '' }}>{{ t.username }}</option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="d-none d-md-block">
+        <div class="card-table">
+            <div class="table-responsive">
+                <table class="table table-custom mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">ID</th>
+                            <th style="width: 20%;">Chofer</th>
+                            <th style="width: 15%;">Patente</th>
+                            <th style="width: 20%;">Transportista</th>
+                            <th style="width: 15%;">Remito Salida</th>
+                            <th style="width: 15%;">Peso Salida (Tn)</th>
+                            <th style="width: 100px;" class="text-end">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in shipments %}
+                        <tr>
+                            <td class="fw-bold text-muted">#{{ s.id }}</td>
+                            <td>
+                                <div class="fw-bold text-dark">{{ s.chofer }}</div>
+                                <div class="small text-muted" style="font-size:0.75rem;">DNI: {{ s.dni }}</div>
+                            </td>
+                            <td class="font-monospace text-primary fw-bold">{{ s.tractor }}</td>
+                            <td class="text-muted">{{ s.transportista.username }}</td>
+
+                            <td colspan="3" style="padding:0;">
+                                <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}" 
+                                      style="display:contents;" 
+                                      onsubmit="return validateWeight(event, this)">
+                                    
+                                    <div style="display:flex; align-items:center; padding:8px 12px; gap:10px;">
+                                        <div style="flex:1;">
+                                            <input type="text" name="remito_arenera" 
+                                                class="form-control form-control-sm form-control-dense" 
+                                                placeholder="N°" value="{{ s.remito_arenera or '' }}"
+                                                {{ 'readonly' if s.status != 'En viaje' else '' }}>
+                                        </div>
+                                        <div style="flex:1;">
+                                            <input type="number" step="0.01" name="peso_neto_arenera" 
+                                                class="form-control form-control-sm form-control-dense" 
+                                                placeholder="00.00" value="{{ s.peso_neto_arenera if s.peso_neto_arenera is not none else '' }}"
+                                                {{ 'readonly' if s.status != 'En viaje' else '' }}>
+                                        </div>
+                                        <div style="width:100px; text-align:right;">
+                                            {% if s.status == 'En viaje' %}
+                                                <button type="submit" name="action" value="confirmar_salida" class="btn-action">
+                                                    <i class="fa-solid fa-check me-1"></i>Salió
+                                                </button>
+                                            {% elif s.status == 'Salió' %}
+                                                 <button type="submit" name="action" value="revertir" class="btn btn-sm btn-undo" title="Corregir">
+                                                    <i class="fa-solid fa-rotate-left"></i>
+                                                </button>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Llegó</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="text-center py-5 text-muted">No hay camiones en espera.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-md-none">
+        {% if shipments %}
+            {% for s in shipments %}
+            <div class="mob-card {{ 'st-salio' if s.status == 'Salió' else ('st-llego' if s.status == 'Llego' else 'st-viaje') }}">
+                
+                <div class="mob-head">
+                    <div>
+                        <div class="mob-title">{{ s.chofer }}</div>
+                        <div class="mob-sub">
+                            {{ s.transportista.username }} • <span class="font-monospace text-dark">{{ s.tractor }}</span>
+                        </div>
+                    </div>
+                    
+                    {% if s.status == 'Salió' %}
+                        <span class="mob-badge badge-salio">Salió</span>
+                    {% elif s.status == 'Llego' %}
+                        <span class="mob-badge badge-llego">Llegó</span>
+                    {% else %}
+                        <span class="mob-badge badge-viaje">En Viaje</span>
+                    {% endif %}
+                </div>
+
+                <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}" 
+                      class="mt-3"
+                      onsubmit="return validateWeight(event, this)">
+                    
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <input type="text" name="remito_arenera" class="form-control form-control-dense" 
+                                   placeholder="Remito" value="{{ s.remito_arenera or '' }}"
+                                   {{ 'readonly' if s.status != 'En viaje' else '' }}>
+                        </div>
+                        <div class="col-6">
+                            <input type="number" step="0.01" name="peso_neto_arenera" class="form-control form-control-dense" 
+                                   placeholder="Kg" value="{{ s.peso_neto_arenera if s.peso_neto_arenera is not none else '' }}"
+                                   {{ 'readonly' if s.status != 'En viaje' else '' }}>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        {% if s.status == 'En viaje' %}
+                            <button type="submit" name="action" value="confirmar_salida" class="btn btn-primary fw-bold shadow-sm">
+                                Confirmar Salida
+                            </button>
+                        {% elif s.status == 'Salió' %}
+                            <button type="submit" name="action" value="revertir" class="btn btn-outline-danger btn-sm">
+                                <i class="fa-solid fa-rotate-left me-2"></i>Corregir
+                            </button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+            {% endfor %}
+            
+            <div class="text-center mt-4 mb-4 text-muted small opacity-50">
+                --- Fin de la lista ---
+            </div>
+
+        {% else %}
+            <div class="text-center py-5">
+                <div class="bg-white p-3 rounded-circle shadow-sm d-inline-block mb-3">
+                    <i class="fa-solid fa-road fa-2x text-muted opacity-25"></i>
+                </div>
+                <h6 class="fw-bold text-secondary">Sin camiones</h6>
+                <p class="text-muted small">Los viajes aparecerán aquí cuando el transportista los cargue.</p>
+                <a href="{{ url_for('arenera_panel') }}" class="btn btn-sm btn-outline-primary">Actualizar</a>
+            </div>
+        {% endif %}
+    </div>
+
+  </div>
+
+  <nav class="bottom-nav">
+    <a href="{{ url_for('arenera_panel') }}" class="nav-item-link active">
+        <i class="fa-solid fa-truck-ramp-box"></i>
+        <span>Recepción</span>
+    </a>
+    <a href="{{ url_for('arenera_history') }}" class="nav-item-link">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>Historial</span>
+    </a>
   </nav>
 
   <script>
-    // Auto-ocultar mensajes flash despues de 5s
-    setTimeout(function(){
-      var f = document.getElementById('flash-container');
-      if(f) f.style.display = 'none';
-    }, 5000);
-    // Ocultar al hacer clic
-    document.querySelectorAll('.flash').forEach(function(el){
-      el.addEventListener('click', function(){ this.style.display='none'; });
+    document.addEventListener('DOMContentLoaded', () => {
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            Swal.fire({
+              toast: true, position: 'top', icon: "{{ 'success' if category in ['ok','success'] else 'info' }}",
+              title: "{{ message }}", showConfirmButton: false, timer: 2000
+            });
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
     });
+
+    // Validar peso "Raro" (<25 o >35 Tn)
+    function validateWeight(event, form) {
+        const weightInput = form.querySelector('input[name="peso_neto_arenera"]');
+        
+        // Si no hay input o es solo lectura (caso revertir), pasamos
+        if (!weightInput || weightInput.readOnly) return true;
+
+        const weight = parseFloat(weightInput.value);
+        if (isNaN(weight)) return true; // Backend validará
+
+        if (weight < 25 || weight > 35) {
+            event.preventDefault(); // Detener envío
+            
+            Swal.fire({
+                title: 'Verificación de Peso',
+                text: `Ingresaste ${weight} Tn. ¿Estás seguro?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#2563eb',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Sí, es correcto',
+                cancelButtonText: 'Revisar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Agregar el action manualmente porque submit() programático no envía el botón pulsado
+                    const hiddenAction = document.createElement('input');
+                    hiddenAction.type = 'hidden';
+                    hiddenAction.name = 'action';
+                    hiddenAction.value = 'confirmar_salida';
+                    form.appendChild(hiddenAction);
+                    
+                    form.submit();
+                }
+            });
+            return false;
+        }
+        return true;
+    }
   </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

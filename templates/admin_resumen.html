@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="es" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matrices de Control | Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --card-radius: 12px;
+    }
+
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: 100px;
+    }
+
+    /* --- NAVBAR --- */
+    .navbar-glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    /* --- TARJETAS MATRIZ --- */
+    .matrix-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--card-radius);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      margin-bottom: 2rem;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Banda de color superior */
+    .card-top-band { height: 4px; width: 100%; }
+    .bg-green .card-top-band { background: #10b981; }   /* Dinero / Ok */
+    .bg-blue .card-top-band { background: #3b82f6; }    /* Flete */
+    .bg-yellow .card-top-band { background: #f59e0b; }  /* Alerta / Out */
+    .bg-gray .card-top-band { background: #64748b; }    /* In */
+    .bg-red .card-top-band { background: #ef4444; }     /* Multas */
+    .bg-white .card-top-band { background: #1e293b; }   /* Camiones */
+
+    .card-header-matrix {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #f1f5f9;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      background: #fff;
+    }
+    .card-header-matrix h2 { font-size: 1rem; font-weight: 700; color: #1e293b; margin: 0; }
+    .card-header-matrix small { font-size: 0.75rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* --- TABLA MATRICIAL AVANZADA --- */
+    .table-responsive-matrix {
+      overflow-x: auto;
+      position: relative;
+      max-height: 500px; /* Scroll vertical si es muy larga */
+    }
+    
+    .table-matrix {
+      width: 100%;
+      border-collapse: separate; /* Necesario para sticky headers */
+      border-spacing: 0;
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+    
+    /* Cabeceras */
+    .table-matrix th {
+      text-align: right;
+      padding: 10px 14px;
+      background: #f8fafc;
+      color: #64748b;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e2e8f0;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    
+    /* Columna Fecha (Sticky Izquierda) */
+    .table-matrix th.col-date, 
+    .table-matrix td.col-date {
+      position: sticky;
+      left: 0;
+      z-index: 20; /* Por encima de celdas normales */
+      text-align: left;
+      border-right: 2px solid #e2e8f0;
+      min-width: 110px;
+    }
+    .table-matrix th.col-date { z-index: 30; } /* La esquina superior izq */
+    
+    .table-matrix td.col-date {
+      background: #fff;
+      color: #1e293b;
+      font-weight: 600;
+    }
+
+    /* Celdas de datos */
+    .table-matrix td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      text-align: right;
+      color: #334155;
+      font-variant-numeric: tabular-nums; /* Alineación numérica perfecta */
+    }
+
+    /* Hover Efecto */
+    .table-matrix tbody tr:hover td { background-color: #f0f9ff; }
+    .table-matrix tbody tr:hover td.col-date { background-color: #f0f9ff; }
+
+    /* Columna Total (Derecha) */
+    .table-matrix th.col-total, 
+    .table-matrix td.col-total {
+      background-color: #f8fafc;
+      border-left: 2px solid #e2e8f0;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    /* Fila Totales (Pie) */
+    tr.row-grand-total td {
+      background-color: #f1f5f9;
+      font-weight: 800;
+      color: #0f172a;
+      border-top: 2px solid #cbd5e1;
+      position: sticky;
+      bottom: 0;
+      z-index: 15;
+    }
+    tr.row-grand-total td.col-date { z-index: 25; background-color: #f1f5f9; }
+
+    .empty-cell { color: #cbd5e1; font-weight: 300; }
+    .text-money { color: #059669; } /* Verde para dinero */
+    .text-alert { color: #ef4444; } /* Rojo para alertas */
+  </style>
+</head>
+<body>
+
+  <nav class="navbar navbar-expand-lg navbar-glass mb-4">
+    <div class="container-xl">
+      <a class="navbar-brand fw-bold text-dark" href="#">
+        <i class="fa-solid fa-layer-group text-primary me-2"></i>Matrices de Control
+      </a>
+      <div class="ms-auto d-flex gap-2">
+         <a href="{{ url_for('admin_config') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-gear me-1"></i> Config
+         </a>
+         <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-primary-soft text-primary bg-primary-subtle fw-medium">
+            <i class="fa-solid fa-arrow-left me-1"></i> Volver
+         </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-xl">
+    
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3">
+            <form class="row g-3 align-items-end">
+                <div class="col-md-auto">
+                    <label class="form-label small text-muted fw-bold text-uppercase mb-1">Desde</label>
+                    <input type="date" name="start" class="form-control form-control-sm" value="{{ start }}">
+                </div>
+                <div class="col-md-auto">
+                    <label class="form-label small text-muted fw-bold text-uppercase mb-1">Hasta</label>
+                    <input type="date" name="end" class="form-control form-control-sm" value="{{ end }}">
+                </div>
+                <div class="col-md-auto">
+                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-medium">
+                        <i class="fa-solid fa-rotate me-2"></i>Actualizar Reporte
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% for table in tables %}
+    <div class="matrix-card {{ table.bg }}">
+      <div class="card-top-band"></div>
+      
+      <div class="card-header-matrix">
+          <h2>
+              {% if table.fmt == 'money' %}<i class="fa-solid fa-sack-dollar me-2 text-success"></i>
+              {% elif table.title == 'Cantidad Camiones' %}<i class="fa-solid fa-truck me-2 text-dark"></i>
+              {% elif table.bg == 'bg-red' %}<i class="fa-solid fa-triangle-exclamation me-2 text-danger"></i>
+              {% else %}<i class="fa-solid fa-table me-2 text-primary"></i>{% endif %}
+              {{ table.title }}
+          </h2>
+          <small>{{ table.sub }}</small>
+      </div>
+
+      <div class="table-responsive-matrix">
+        <table class="table-matrix">
+          <thead>
+            <tr>
+              <th class="col-date">Fecha</th>
+              {% for tid in trans_ids %}
+                  <th title="{{ trans_names[tid] }}">{{ trans_names[tid]|truncate(15) }}</th>
+              {% endfor %}
+              <th class="col-total">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in table.rows %}
+            <tr>
+              <td class="col-date">
+                {{ row.date.strftime('%d/%m/%y') }}
+              </td>
+              
+              {% for cell in row.cells %}
+                  <td>
+                      {% if cell != 0 %}
+                          {% if table.fmt == 'money' %}
+                               <span class="text-money fw-medium">${{ "{:,.0f}".format(cell) }}</span>
+                          {% elif table.fmt == 'int' %}
+                               {{ cell|int }}
+                          {% else %}
+                               {{ "{:,.2f}".format(cell) }}
+                          {% endif %}
+                      {% else %}
+                          <span class="empty-cell">-</span>
+                      {% endif %}
+                  </td>
+              {% endfor %}
+              
+              <td class="col-total">
+                  {% if table.fmt == 'money' %}
+                       ${{ "{:,.0f}".format(row.row_total) }}
+                  {% elif table.fmt == 'int' %}
+                       {{ row.row_total|int }}
+                  {% else %}
+                       {{ "{:,.2f}".format(row.row_total) }}
+                  {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="{{ trans_ids|length + 2 }}" class="text-center py-4 text-muted">
+                <i class="fa-regular fa-folder-open fa-2x mb-2 opacity-25 d-block"></i>
+                No hay datos certificados en este periodo.
+              </td>
+            </tr>
+            {% endfor %}
+            
+            {% if table.rows %}
+            <tr class="row-grand-total">
+              <td class="col-date">TOTAL GRAL.</td>
+              {% for tid in trans_ids %}
+                  <td>
+                      {% if table.cols[tid] != 0 %}
+                          {% if table.fmt == 'money' %}
+                               ${{ "{:,.0f}".format(table.cols[tid]) }}
+                          {% elif table.fmt == 'int' %}
+                               {{ table.cols[tid]|int }}
+                          {% else %}
+                               {{ "{:,.2f}".format(table.cols[tid]) }}
+                          {% endif %}
+                      {% else %}
+                          -
+                      {% endif %}
+                  </td>
+              {% endfor %}
+              <td class="col-total">
+                  {% if table.fmt == 'money' %}
+                       ${{ "{:,.0f}".format(table.tot) }}
+                  {% elif table.fmt == 'int' %}
+                       {{ table.tot|int }}
+                  {% else %}
+                       {{ "{:,.2f}".format(table.tot) }}
+                  {% endif %}
+              </td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+    {% if loop.index is divisibleby 2 %}
+      <div style="page-break-after: always;"></div>
+    {% endif %}
+    
+    {% endfor %}
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

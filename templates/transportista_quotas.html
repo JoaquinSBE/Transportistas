@@ -1,177 +1,212 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
-  <title>Cuotas · Transportista</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Mis Cupos | Transportista</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
   <style>
-    :root{
-      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
-      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
-      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
-    }
-    *{ box-sizing:border-box }
-    html,body{
-      margin:0; padding:0; background:var(--bg); color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;
-      -webkit-text-size-adjust:100%;
-    }
-    .wrap{ max-width:760px; margin:0 auto; padding:16px 12px 80px; } /* espacio para navbar */
-
-    /* header */
-    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-    .hello{ display:flex; flex-direction:column; }
-    .hello h1{ margin:0; font-size:18px; }
-    .hello .sub{ color:var(--muted); font-size:12px; }
-    .btn-sm{
-      padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--brand-2);
-      text-decoration:none; font-weight:600;
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --bottom-nav-height: 70px;
     }
 
-    /* selector de días */
-    .days{
-      position:sticky; top:0; z-index:5;
-      background:linear-gradient(#f5f7fb 60%, rgba(245,247,251,.85));
-      padding:10px 0 8px; margin-top:12px; border-bottom:1px solid var(--ring);
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: calc(var(--bottom-nav-height) + 20px);
     }
-    .days-scroll{
-    display:flex; gap:8px;
-    overflow-x:auto;
-    overflow-y:visible;
-    -webkit-overflow-scrolling:touch;
-    padding-top:4px;     
-    padding-bottom:4px;
-    }
-    .chip{
-      flex:0 0 auto;
-      width:64px;              /* ancho fijo */
-      aspect-ratio: 1 / 1;     /* alto = ancho (si preferís, podés usar height:64px) */
-      padding:0;               /* sin padding para no redondear */
-      border-radius:12px;      /* esquinas suaves; poné 0 para esquinas rectas */
-      border:1px solid var(--ring);
-      background:#fff; color:var(--ink);
-      font-weight:700; text-align:center;
-      display:flex; align-items:center; justify-content:center; flex-direction:column;
-      user-select:none; cursor:pointer;
-    }
-    .chip small{ display:block; font-weight:600; color:var(--muted); margin-top:2px; }
 
-    .chip.active{ border-color:var(--brand-2); box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+    /* --- TOP BAR --- */
+    .top-bar {
+      background: #fff; border-bottom: 1px solid #e5e7eb; padding: 1rem;
+      display: flex; justify-content: space-between; align-items: center;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .top-title { font-size: 1.1rem; font-weight: 700; color: #111827; margin: 0; }
 
-    /* cards */
-    .section{ margin-top:12px; }
-    .card{
-      background:var(--card); border-radius:var(--radius);
-      border:1px solid var(--ring);
-      box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04);
-      padding:12px; margin-top:10px;
+    /* --- FECHAS SLIDER --- */
+    .date-slider {
+      display: flex; gap: 8px; overflow-x: auto; padding: 0.5rem 0 1rem 0;
+      margin-bottom: 0.5rem; scrollbar-width: none;
     }
-    .arena{ display:flex; gap:10px; align-items:center; }
-    .arena .meta{ flex:1; }
-    .arena .name{ font-weight:700; font-size:14px; }
-    .sub{ color:var(--muted); font-size:12px; }
-    .bar{ height:6px; width:100%; background:#eef2ff; border:1px solid var(--ring); border-radius:6px; overflow:hidden; margin-top:6px; }
-    .bar > span{ display:block; height:100%; background:linear-gradient(90deg, var(--brand-2), #7aa7ff); width:0%; }
-    .btn{
-      padding:10px 12px; border-radius:12px; border:1px solid var(--brand-2);
-      background:var(--brand-2); color:#fff; font-weight:700; text-decoration:none; display:inline-block;
-      min-width:140px; text-align:center;
+    .date-slider::-webkit-scrollbar { display: none; }
+    
+    .date-chip {
+      flex: 0 0 auto; width: 60px; height: 70px;
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s; color: #6b7280;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
     }
-    .btn.disabled{ opacity:.5; pointer-events:none; }
-    .empty{ color:var(--muted); font-size:14px; text-align:center; padding:16px 8px; }
+    .date-chip.active {
+      background: var(--bs-primary); border-color: var(--bs-primary); color: #fff;
+      box-shadow: 0 4px 6px rgba(37,99,235,0.3); transform: translateY(-2px);
+    }
+    
+    .chip-day { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+    .chip-num { font-size: 1.2rem; font-weight: 700; line-height: 1; margin-top: 2px; }
+    .chip-today { font-size: 0.6rem; opacity: 0.8; font-weight: 500; }
 
-    /* navbar inferior sticky */
-    .nav{
-      position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring);
-      display:flex; justify-content:space-around; padding:8px 10px; z-index:10;
+    /* --- TARJETA CUPO --- */
+    .quota-card {
+      background: #fff; border-radius: 16px; padding: 1.2rem;
+      margin-bottom: 1rem; border: 1px solid #e5e7eb;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+      animation: fadeIn 0.3s ease-out;
     }
-    .nav a{
-      flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700;
-      padding:10px 8px; border-radius:10px;
+    @keyframes fadeIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+
+    .quota-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .quota-company { font-weight: 700; color: #1f2937; font-size: 1rem; }
+    
+    .quota-meter { margin-bottom: 12px; }
+    .meter-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: #6b7280; margin-bottom: 4px; }
+    .progress-custom { height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden; }
+    .progress-bar-custom { height: 100%; background: var(--bs-primary); border-radius: 4px; }
+    
+    .bg-full { background: #f59e0b; }
+    
+    .btn-action {
+      width: 100%; padding: 0.7rem; font-weight: 700; border-radius: 10px; font-size: 0.9rem;
+      background: #fff; color: var(--bs-primary); border: 1px solid var(--bs-primary);
+      transition: all 0.2s; text-align: center; text-decoration: none; display: block;
     }
-    .nav a.active{ background:#eef2ff; }
+    .btn-action:hover { background: #eff6ff; }
+    .btn-action.primary { background: var(--bs-primary); color: #fff; border: none; box-shadow: 0 4px 6px rgba(37,99,235,0.2); }
+    .btn-action.disabled { background: #e5e7eb; color: #9ca3af; border: none; pointer-events: none; box-shadow: none; }
+
+    /* --- BOTTOM NAV --- */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: var(--bottom-nav-height); background: #fff; border-top: 1px solid #e5e7eb;
+      display: flex; justify-content: space-around; align-items: center; z-index: 1000;
+    }
+    .nav-item-link {
+      display: flex; flex-direction: column; align-items: center;
+      text-decoration: none; color: #9ca3af; font-size: 0.75rem; font-weight: 500;
+    }
+    .nav-item-link i { font-size: 1.5rem; margin-bottom: 4px; }
+    .nav-item-link.active { color: var(--bs-primary); }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <!-- Header -->
-    <div class="top">
-      <div class="hello">
-        <h1>Mis cuotas</h1>
-      </div>
-      <a class="btn-sm" href="{{ url_for('logout') }}">Cerrar sesión</a>
-    </div>
 
-    <!-- Selector de días -->
-    <div class="days">
-      <div class="days-scroll" id="days">
-        {% for d in week_dates %}
-          {% set is_today = (d == week_dates[0]) %}
-          <div class="chip {{ 'active' if loop.index0 == 0 else '' }}"
-               data-date="{{ d.isoformat() }}"
-               role="button" tabindex="0">
-            {{ d.strftime('%d/%m') }}
-            {% if is_today %}<small>hoy</small>{% endif %}
-          </div>
-        {% endfor %}
-      </div>
+  <div class="top-bar">
+    <div class="d-flex align-items-center gap-2">
+        <h1 class="top-title"><i class="fa-solid fa-calendar-days text-primary me-2"></i>Mis Cupos</h1>
     </div>
-
-    <!-- Grillas por día -->
-    <div class="section" id="grids">
-      {% for d in week_dates %}
-        {% set qs = by_date.get(d, []) %}
-        <div class="day-grid" data-date="{{ d.isoformat() }}" style="{{ '' if loop.index0==0 else 'display:none' }}">
-          {% if qs and qs|length %}
-            {% for q in qs %}
-              {% set lim  = q.limit or 0 %}
-              {% set used = q.used or 0 %}
-              {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
-              <div class="card">
-                <div class="arena">
-                  <div class="meta">
-                    <div class="name">{{ q.arenera.username }}</div>
-                    <div class="sub">{{ used }} / {{ lim }} usados</div>
-                    <div class="bar"><span style="width:{{ pct }}%"></span></div>
-                  </div>
-                  <a class="btn {{ 'disabled' if (lim==0 or used>=lim) else '' }}"
-                     href="{{ url_for('transportista_arenera', arenera_id=q.arenera_id) }}?date={{ d.isoformat() }}">
-                    Cargar viaje
-                  </a>
-                </div>
-              </div>
-            {% endfor %}
-          {% else %}
-            <div class="card"><div class="empty">Sin cupos para {{ d.strftime('%d/%m') }}</div></div>
-          {% endif %}
-        </div>
-      {% endfor %}
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('logout') }}" class="btn btn-light btn-sm border rounded-circle text-danger" 
+           style="width:36px; height:36px; display:grid; place-items:center;" title="Cerrar Sesión">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+        </a>
     </div>
   </div>
 
-  <!-- Navbar inferior -->
-  <nav class="nav">
-    <a href="{{ url_for('transportista_panel') }}">Inicio</a>
-    <a class="active" href="{{ url_for('transportista_quotas') }}">Cuotas</a>
-    <a href="{{ url_for('transportista_history') }}">Historial</a>
-  </nav>>
+  <div class="container-xl px-3">
+
+    <div class="date-slider" id="dateSlider">
+        {% set days_es = ['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM'] %}
+        
+        {% for d in week_dates %}
+          {% set is_today = (d == week_dates[0]) %}
+          <div class="date-chip {{ 'active' if loop.index0 == 0 else '' }}" 
+               onclick="selectDate('{{ d.isoformat() }}', this)">
+              <span class="chip-day">{{ days_es[d.weekday()] }}</span>
+              <span class="chip-num">{{ d.strftime('%d') }}</span>
+              {% if is_today %}<span class="chip-today">HOY</span>{% endif %}
+          </div>
+        {% endfor %}
+    </div>
+
+    <div id="gridsContainer">
+      {% for d in week_dates %}
+        {% set qs = by_date.get(d, []) %}
+        
+        <div class="day-panel" id="panel-{{ d.isoformat() }}" style="{{ '' if loop.index0 == 0 else 'display:none' }}">
+            
+            <h6 class="text-muted small fw-bold text-uppercase mb-3 ps-1">
+                Disponibilidad para el {{ d.strftime('%d/%m') }}
+            </h6>
+
+            {% if qs and qs|length %}
+                {% for q in qs %}
+                    {% set lim  = q.limit or 0 %}
+                    {% set used = q.used or 0 %}
+                    {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
+                    {% set is_full = (lim > 0 and used >= lim) %}
+                    
+                    <div class="quota-card">
+                        <div class="quota-header">
+                            <div class="quota-company">{{ q.arenera.username }}</div>
+                            {% if is_full %}
+                                <span class="badge bg-warning text-dark">Completo</span>
+                            {% else %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">Disponible</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="quota-meter">
+                            <div class="meter-labels">
+                                <span>{{ used }} usados</span>
+                                <span>{{ lim }} total</span>
+                            </div>
+                            <div class="progress-custom">
+                                <div class="progress-bar-custom {{ 'bg-full' if is_full else '' }}" style="width: {{ pct }}%"></div>
+                            </div>
+                        </div>
+                        
+                        <a href="{{ url_for('transportista_arenera', arenera_id=q.arenera_id) }}?date={{ d.isoformat() }}" 
+                           class="btn-action {{ 'disabled' if is_full else 'primary' }}">
+                            {{ 'Sin Cupo' if is_full else 'Cargar Viaje' }}
+                        </a>
+                        
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center py-5 text-muted opacity-50">
+                    <i class="fa-solid fa-calendar-xmark fa-3x mb-3"></i>
+                    <p>No tienes cupos asignados para esta fecha.</p>
+                </div>
+            {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  <nav class="bottom-nav">
+    <a href="{{ url_for('transportista_panel') }}" class="nav-item-link">
+        <i class="fa-solid fa-house"></i><span>Inicio</span>
+    </a>
+    <a href="#" class="nav-item-link active">
+        <i class="fa-solid fa-calendar-check"></i><span>Cupos</span>
+    </a>
+    <a href="{{ url_for('transportista_history') }}" class="nav-item-link">
+        <i class="fa-solid fa-clock-rotate-left"></i><span>Historial</span>
+    </a>
+  </nav>
 
   <script>
-    // Tabs de días (mobile friendly)
-    (function(){
-      const chips = Array.from(document.querySelectorAll('.chip'));
-      const grids = Array.from(document.querySelectorAll('.day-grid'));
-
-      function activate(dateStr){
-        chips.forEach(c => c.classList.toggle('active', c.getAttribute('data-date')===dateStr));
-        grids.forEach(g => g.style.display = (g.getAttribute('data-date')===dateStr) ? '' : 'none');
-      }
-
-      chips.forEach(chip=>{
-        chip.addEventListener('click', ()=> activate(chip.getAttribute('data-date')));
-        chip.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); activate(chip.getAttribute('data-date')); }});
-      });
-    })();
+    function selectDate(dateStr, element) {
+        document.querySelectorAll('.date-chip').forEach(chip => chip.classList.remove('active'));
+        element.classList.add('active');
+        document.querySelectorAll('.day-panel').forEach(panel => panel.style.display = 'none');
+        document.getElementById('panel-' + dateStr).style.display = 'block';
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
   </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

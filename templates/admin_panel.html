@@ -1,220 +1,562 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
-  <title>Panel Admin · Transportistas</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel Admin | Gestión Logística</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
   <style>
-    :root{
-      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
-      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
-      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-primary-rgb: 37, 99, 235;
+      --bs-body-bg: #f3f4f6;
+      --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --card-radius: 12px;
     }
-    *{ box-sizing:border-box }
-    html,body{
-      margin:0; padding:0; background:var(--bg); color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;
-      -webkit-text-size-adjust:100%;
-    }
-    .wrap{ max-width:1200px; margin:28px auto; padding:0 16px; overflow:clip; }
-    .header{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
-    .header h1{ margin:0; font-size:28px }
-    .actions{ display:flex; gap:8px; flex-wrap:wrap }
-    .btn{
-      min-height:36px; padding:8px 14px; border-radius:10px; cursor:pointer;
-      border:1px solid var(--brand-2); background:var(--brand-2); color:#fff; font-weight:600; text-decoration:none;
-      display:inline-flex; align-items:center; gap:6px;
-    }
-    .btn.outline{ background:#fff; color:var(--brand-2); }
-    .card{
-      background:var(--card); border-radius:var(--radius);
-      box-shadow:0 1px 2px rgba(15,23,42,.06), 0 6px 14px rgba(2,6,23,.04);
-      display:flex; flex-direction:column; min-width:0;
-      border:1px solid var(--ring);
-    }
-    .card-h{ padding:14px 16px; border-bottom:1px solid var(--ring); display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
-    .card-h h3{ margin:0; font-size:18px }
-    .card-b{ padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
-    .grid{ display:grid; gap:16px }
-    .grid-top{ grid-template-columns:1.2fr 1fr; }
-    .grid-bottom{ grid-template-columns:1fr 1fr; }
-    @media (max-width:1000px){ .grid-top,.grid-bottom{ grid-template-columns:1fr } }
 
-    /* Tablas */
-    .table-wrap{ overflow:auto; -webkit-overflow-scrolling:touch; }
-    table{ width:100%; border-collapse:separate; border-spacing:0; }
-    th,td{ padding:10px 12px; border-bottom:1px solid var(--ring); font-size:14px; text-align:left; white-space:nowrap; }
-    th{ color:var(--muted); background:#fafbff; font-weight:600; position:sticky; top:0; }
-    tr:last-child td{ border-bottom:none; }
-    .sub{ color:var(--muted); font-size:12px }
-    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .pill.ok{ background:#e9f9f2; color:#0d7a5a; }
-    .pill.warn{ background:#fff3d6; color:#8a5a07; }
-    .pill.bad{ background:#ffe4e4; color:#8a1a1a; }
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: 40px;
+    }
 
-    /* Form alta */
-    .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
-    @media (max-width:700px){ .form-grid{ grid-template-columns:1fr } }
-    label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px }
-    .in{ width:100%; min-height:36px; padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; }
+    /* --- TARJETAS --- */
+    .card-custom {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      margin-bottom: 1.5rem;
+      transition: transform 0.2s ease;
+    }
+    
+    .card-header-custom {
+      background: transparent;
+      border-bottom: 1px solid #f3f4f6;
+      padding: 1rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
 
-    /* Flash */
-    .flash-container { text-align:center; margin:10px 0; }
-    .flash{ display:inline-block; padding:12px 18px; border-radius:8px; margin:6px auto; font-weight:600; max-width:700px; }
-    .flash-success{ background:#d4edda; color:#155724; }
-    .flash-error{ background:#f8d7da; color:#721c24; }
-    .flash-info{ background:#d1ecf1; color:#0c5460; }
-    th.center, td.center { text-align: center; }
+    .card-header-custom h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0;
+      color: #111827;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-badge {
+      background: #f3f4f6;
+      color: #4b5563;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    /* --- BOTONES --- */
+    .btn-primary-soft {
+      background-color: rgba(var(--bs-primary-rgb), 0.1);
+      color: var(--bs-primary);
+      font-weight: 500;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary-soft:hover {
+      background-color: rgba(var(--bs-primary-rgb), 0.2);
+      color: var(--bs-primary);
+    }
+
+    .btn-icon {
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: background 0.2s;
+      color: #6b7280;
+      background: none;
+      border: none;
+    }
+    .btn-icon:hover { background-color: #f3f4f6; color: #111827; }
+    .btn-icon.delete:hover { background-color: #fee2e2; color: #ef4444; }
+
+    /* --- ACCESOS RÁPIDOS --- */
+    .quick-link-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 0.75rem;
+    }
+    .quick-link-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      text-decoration: none;
+      color: #4b5563;
+      background: #fff;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .quick-link-card:hover {
+      border-color: var(--bs-primary);
+      color: var(--bs-primary);
+      transform: translateY(-2px);
+      box-shadow: var(--card-shadow);
+    }
+    .quick-link-card i { font-size: 1.4rem; margin-bottom: 0.5rem; }
+    .quick-link-card span { font-size: 0.8rem; font-weight: 500; }
+
+    /* --- TABLAS --- */
+    .table-custom th {
+      background-color: #f9fafb;
+      color: #6b7280;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .table-custom td {
+      vertical-align: middle;
+      font-size: 0.85rem;
+      color: #374151;
+      border-bottom: 1px solid #f3f4f6;
+      padding: 0.8rem 0.75rem;
+    }
+    .table-custom tr:last-child td { border-bottom: none; }
+
+    /* --- ESTADO CUOTA --- */
+    .badge-quota {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-quota.ok { background: #dcfce7; color: #166534; }
+    .badge-quota.warn { background: #fef3c7; color: #92400e; }
+    .badge-quota.zero { background: #f3f4f6; color: #9ca3af; opacity: 0.8; }
+
+    /* --- NAVBAR --- */
+    .navbar-glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+    .brand-logo { font-weight: 700; color: #111827; letter-spacing: -0.5px; }
+
+    /* Form styles */
+    .form-control, .form-select {
+      border-radius: 8px;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid #d1d5db;
+      font-size: 0.9rem;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: var(--bs-primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
   </style>
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    <div class="flash-container" id="flashes">
-      {% for category, message in messages %}
-        <div class="flash flash-{{ 'success' if category in ['ok','success'] else ('error' if category in ['error','danger'] else 'info') }}">{{ message }}</div>
-      {% endfor %}
-    </div>
-    <script>
-      for (const el of document.querySelectorAll('#flashes .flash')) {
-        setTimeout(() => el.remove(), 4500);
-        el.addEventListener('click', () => el.remove());
-      }
-    </script>
-  {% endif %}
-  {% endwith %}
+  <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
-  <div class="wrap">
-    <div class="header">
-      <h1>Administración</h1>
-      <div class="actions">
-        <a class="btn" href="{{ url_for('admin_export') }}">Descargar historial (.xlsx)</a>
 
-        <!-- Cambio de contra comentado -->
-        <!-- <a href="{{ url_for('change_password') }}">Cambiar contraseña</a> Cambio de contra comentado -->
-        <a class="btn" href="{{ url_for('logout') }}">Cerrar sesión</a>
+  <nav class="navbar navbar-expand-lg navbar-glass mb-4">
+    <div class="container-xl">
+      <a class="navbar-brand brand-logo" href="#">
+        <i class="fa-solid fa-truck-fast text-primary me-2"></i>Logística<span class="text-primary"> Admin</span>
+      </a>
+      
+      <div class="d-flex gap-2 align-items-center ms-auto">
+        <a href="{{ url_for('sync_sbe') }}" 
+           class="btn btn-primary-soft btn-sm d-flex align-items-center gap-2"
+           onclick="showSyncLoading(event)">
+           <i class="fa-solid fa-rotate"></i>
+           <span>Sync SBE</span>
+        </a>
+
+        <a href="{{ url_for('admin_export') }}" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2">
+          <i class="fa-solid fa-file-excel"></i> <span class="d-none d-sm-inline">Excel</span>
+        </a>
+        
+        <div class="vr mx-2"></div>
+        
+        <a href="{{ url_for('logout') }}" class="btn btn-sm text-danger fw-medium" title="Cerrar Sesión">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-xl">
+    
+    <div class="row g-4 mb-4">
+      
+      <div class="col-lg-5">
+        <div class="card-custom h-100">
+          <div class="card-header-custom">
+            <h3><i class="fa-solid fa-user-plus me-2 text-muted"></i>Alta Rápida</h3>
+          </div>
+          <div class="p-4">
+            <form method="post" action="{{ url_for('create_user') }}">
+              <div class="row g-3">
+                <div class="col-12">
+                  <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="fa-regular fa-user text-muted"></i></span>
+                    <input type="text" class="form-control border-start-0 ps-0" name="username" placeholder="Usuario" required autocomplete="off">
+                  </div>
+                </div>
+                <div class="col-12">
+                  <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="fa-solid fa-lock text-muted"></i></span>
+                    <input type="password" class="form-control border-start-0 ps-0" name="password" placeholder="Clave" required autocomplete="new-password">
+                  </div>
+                </div>
+                <div class="col-12">
+                  <select class="form-select" name="tipo" id="user-tipo" required>
+                    <option value="" disabled selected>Seleccionar Rol...</option>
+                    <option value="transportista">Transportista</option>
+                    <option value="arenera">Arenera</option>
+                    <option value="sub_arenera">↳ Basculista</option>
+                    <option value="gestion">Usuario Gestión</option>
+                    <option value="admin">Administrador</option>
+                  </select>
+                </div>
+                
+                <div class="col-12 animate__animated animate__fadeIn" id="parent-field" style="display:none;">
+                   <label class="form-label text-xs text-muted ms-1">Arenera Principal</label>
+                   <select class="form-select bg-light" name="parent_id">
+                        <option value="">Seleccionar Padre...</option>
+                        {% for a in areneras %}
+                            <option value="{{ a.a.id }}">{{ a.a.username }}</option>
+                        {% endfor %}
+                   </select>
+                </div>
+
+                <div class="col-12 mt-2">
+                  <button class="btn btn-primary w-100" type="submit">Crear Usuario</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-7">
+        <div class="card-custom h-100">
+          <div class="card-header-custom">
+            <h3><i class="fa-solid fa-grid-2 me-2 text-muted"></i>Accesos</h3>
+          </div>
+          <div class="p-4">
+            <div class="quick-link-grid">
+              <a href="{{ url_for('admin_resumen') }}" class="quick-link-card">
+                <i class="fa-solid fa-chart-pie text-primary"></i><span>Resumen</span>
+              </a>
+              <a href="{{ url_for('admin_certificacion') }}" class="quick-link-card">
+                <i class="fa-solid fa-check-double text-success"></i><span>Certificar</span>
+              </a>
+              <a href="{{ url_for('admin_control_arena') }}" class="quick-link-card">
+                <i class="fa-solid fa-mound text-warning"></i><span>C. Arena</span>
+              </a>
+              <a href="{{ url_for('admin_control_flete') }}" class="quick-link-card">
+                <i class="fa-solid fa-truck-ramp-box text-info"></i><span>C. Fletes</span>
+              </a>
+               <a href="{{ url_for('admin_dashboard') }}" class="quick-link-card">
+                <i class="fa-solid fa-chart-line text-dark"></i><span>Dash</span>
+              </a>
+              <a href="{{ url_for('admin_config') }}" class="quick-link-card">
+                <i class="fa-solid fa-sliders text-secondary"></i><span>Config</span>
+              </a>
+              </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Fila superior: Alta rápida + Resumen transportistas -->
-    <div class="grid grid-top" style="margin-bottom:16px;">
-      <!-- Alta rápida de usuario -->
-      <div class="card">
-        <div class="card-h"><h3>Alta rápida de usuario</h3></div>
-        <div class="card-b">
-          <form method="post" action="{{ url_for('create_user') }}" class="form-grid">
-            <div>
-              <label>Usuario</label>
-              <input class="in" type="text" name="username" placeholder="Ej.: juan.perez" required>
-            </div>
-            <div>
-              <label>Clave</label>
-              <input class="in" type="password" name="password" placeholder="********" required>
-            </div>
-            <div>
-              <label>Tipo</label>
-              <select class="in" name="tipo" required>
-                <option value="transportista">Transportista</option>
-                <option value="arenera">Arenera</option>
-              </select>
-            </div>
-            <div style="display:flex; align-items:flex-end; justify-content:flex-end;">
-              <button class="btn" type="submit">Crear</button>
-            </div>
-          </form>
+    <div class="row g-4">
+      
+      <div class="col-lg-8">
+        <div class="card-custom">
+          <div class="card-header-custom">
+            <h3>Transportistas</h3>
+            <span class="stat-badge">{{ transportistas|length }}</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-custom mb-0 table-hover">
+              <thead>
+                <tr>
+                  <th class="ps-4">Usuario</th>
+                  <th class="text-center">Envíos</th>
+                  <th class="text-center">Cupo</th>
+                  <th class="text-end pe-4">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in transportistas %}
+                <tr>
+                  <td class="ps-4 fw-medium text-dark">
+                    <i class="fa-solid fa-truck text-muted me-2 opacity-50"></i>{{ r.t.username }}
+                  </td>
+                  <td class="text-center text-muted">{{ r.sent }}</td>
+                  <td class="text-center">
+                    {% if r.quota_limit > 0 %}
+                      {% if r.quota > 0 %}
+                         <span class="badge-quota ok" title="Disponible / Total">{{ r.quota }} / {{ r.quota_limit }}</span>
+                      {% else %}
+                         <span class="badge-quota warn">Agotado</span>
+                      {% endif %}
+                    {% else %}
+                      <span class="badge-quota zero">-</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end pe-4">
+                    <a href="{{ url_for('manage_quotas', transportista_id=r.t.id) }}" class="btn-icon" title="Cupos"><i class="fa-solid fa-calendar-days"></i></a>
+                    <a href="{{ url_for('todos_camiones') }}?transportista={{ r.t.username }}" class="btn-icon" title="Viajes"><i class="fa-solid fa-list-ul"></i></a>
+                    
+                    <button type="button" onclick="promptResetPassword({{ r.t.id }}, '{{ r.t.username }}')" class="btn-icon" title="Blanquear Clave">
+                      <i class="fa-solid fa-key text-warning"></i>
+                    </button>
+                    
+                    <a href="#" onclick="confirmDelete('{{ url_for('delete_user', user_id=r.t.id) }}', '{{ r.t.username }}')" class="btn-icon delete"><i class="fa-solid fa-trash"></i></a>
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center text-muted py-4">No hay transportistas.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <!-- Resumen rápido (hoy) con links -->
-      <div class="card">
-        <div class="card-h"><h3>Accesos</h3></div>
-        <div class="card-b" style="gap:8px;">
-          <a class="btn outline" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
-          <a class="btn outline" href="{{ url_for('todos_camiones') }}">Historial camiones</a>
-          <a class="btn outline" href="{{ url_for('password_log') }}">Cambios de contraseña</a>
-        </div>
-      </div>
-    </div>
+      <div class="col-lg-4">
+        
+        <div class="card-custom">
+          <div class="card-header-custom">
+            <h3>Areneras</h3>
+            <span class="stat-badge">{{ areneras|length }}</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-custom mb-0">
+              <tbody>
+                {% for r in areneras %}
+                <tr>
+                  <td class="ps-3">
+                    <div class="fw-medium text-dark">{{ r.a.username }}</div>
+                    {% if r.a.sub_users.count() > 0 %}
+                        <small class="text-primary" style="font-size:0.7rem;"><i class="fa-solid fa-diagram-project me-1"></i>{{ r.a.sub_users.count() }} subs</small>
+                    {% endif %}
+                  </td>
+                  <td class="text-end pe-3">
+                    <a href="{{ url_for('todos_camiones') }}?arenera={{ r.a.username }}" class="btn-icon btn-sm"><i class="fa-solid fa-eye"></i></a>
+                    
+                    <button type="button" onclick="promptResetPassword({{ r.a.id }}, '{{ r.a.username }}')" class="btn-icon btn-sm" title="Blanquear Clave">
+                      <i class="fa-solid fa-key text-warning"></i>
+                    </button>
 
-    <!-- Fila inferior: tablas -->
-    <div class="grid grid-bottom">
-    <!-- Transportistas -->
-    <div class="card">
-      <div class="card-h"><h3>Transportistas</h3></div>
-      <div class="card-b">
-        {% if transportistas %}
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Usuario</th>
-                <th style="text-align:center;">Envíos</th>
-                <th style="text-align:center;">Cupo semana</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in transportistas %}
-              <tr>
-                <td>{{ r.t.username }}</td>
-                <td style="text-align:center;">{{ r.sent }}</td>
-                <td style="text-align:center;">
-                  {% if r.quota and r.quota > 0 %}
-                    <span class="pill ok">{{ r.quota }}</span>
-                  {% else %}
-                    <span class="pill warn">0</span>
-                  {% endif %}
-                </td>
-                <td style="display:flex; gap:8px;">
-                  <a class="btn outline" href="{{ url_for('manage_quotas', transportista_id=r.t.id) }}">Cuotas</a>
-                  <a class="btn outline" href="{{ url_for('todos_camiones') }}?transportista={{ r.t.username }}">Viajes</a>
-                  <a class="btn outline" href="{{ url_for('delete_user', user_id=r.t.id) }}" onclick="return confirm('¿Eliminar transportista {{ r.t.username }}?');">X</a>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+                    <a href="#" onclick="confirmDelete('{{ url_for('delete_user', user_id=r.a.id) }}', '{{ r.a.username }}')" class="btn-icon delete btn-sm"><i class="fa-solid fa-trash"></i></a>
+                  </td>
+                </tr>
+                {% else %}
+                  <tr><td colspan="2" class="text-center py-3 text-muted">Sin registros.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
-        {% else %}
-          <div class="sub">No hay transportistas cargados.</div>
+
+        {% if sub_areneras %}
+        <div class="card-custom">
+           <div class="card-header-custom">
+              <h3>Basculistas</h3>
+              <span class="stat-badge">{{ sub_areneras|length }}</span>
+           </div>
+           <div class="table-responsive">
+             <table class="table table-custom mb-0">
+               <tbody>
+                 {% for u in sub_areneras %}
+                 <tr>
+                   <td class="ps-3">
+                     <div class="fw-medium text-dark">{{ u.username }}</div>
+                     <span class="badge bg-light text-secondary border" style="font-size:0.65rem;">De: {{ u.parent.username }}</span>
+                   </td>
+                   <td class="text-end pe-3">
+                     <button type="button" onclick="promptResetPassword({{ u.id }}, '{{ u.username }}')" class="btn-icon btn-sm" title="Blanquear Clave">
+                        <i class="fa-solid fa-key text-warning"></i>
+                     </button>
+                     <a href="#" onclick="confirmDelete('{{ url_for('delete_user', user_id=u.id) }}', '{{ u.username }}')" class="btn-icon delete btn-sm"><i class="fa-solid fa-trash"></i></a>
+                   </td>
+                 </tr>
+                 {% endfor %}
+               </tbody>
+             </table>
+           </div>
+        </div>
         {% endif %}
+
+        {% if gestores %}
+        <div class="card-custom">
+           <div class="card-header-custom">
+              <h3>Gestión</h3>
+              <span class="stat-badge">{{ gestores|length }}</span>
+           </div>
+           <div class="table-responsive">
+             <table class="table table-custom mb-0">
+               <tbody>
+                 {% for u in gestores %}
+                 <tr>
+                   <td class="ps-3 fw-medium text-dark">
+                     <i class="fa-solid fa-user-tie text-muted me-2 opacity-50"></i>{{ u.username }}
+                   </td>
+                   <td class="text-end pe-3">
+                     <button type="button" onclick="promptResetPassword({{ u.id }}, '{{ u.username }}')" class="btn-icon btn-sm" title="Blanquear Clave">
+                        <i class="fa-solid fa-key text-warning"></i>
+                     </button>
+                     <a href="#" onclick="confirmDelete('{{ url_for('delete_user', user_id=u.id) }}', '{{ u.username }}')" class="btn-icon delete btn-sm"><i class="fa-solid fa-trash"></i></a>
+                   </td>
+                 </tr>
+                 {% endfor %}
+               </tbody>
+             </table>
+           </div>
+        </div>
+        {% endif %}
+
       </div>
     </div>
 
-    <!-- Areneras -->
-    <div class="card">
-      <div class="card-h"><h3>Areneras</h3></div>
-      <div class="card-b">
-        {% if areneras %}
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Usuario</th>
-                <th style="text-align:center;">Envíos recibidos</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in areneras %}
-              <tr>
-                <td>{{ r.a.username }}</td>
-                <td style="text-align:center;">{{ r.shipments }}</td>
-                <td style="display:flex; gap:8px;">
-                  <a class="btn outline" href="{{ url_for('todos_camiones') }}?arenera={{ r.a.username }}">Viajes</a>
-                  <a class="btn outline" href="{{ url_for('delete_user', user_id=r.a.id) }}" onclick="return confirm('¿Eliminar arenera {{ r.a.username }}?');">X</a>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-          <div class="sub">No hay areneras cargadas.</div>
-        {% endif %}
-      </div>
-    </div>
-    </div>
   </div>
+
+  <script>
+    // 1. MANEJO DE FLASH MESSAGES
+    document.addEventListener('DOMContentLoaded', () => {
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            Swal.fire({
+              toast: true,
+              position: 'top-end',
+              icon: "{{ 'success' if category in ['ok','success'] else ('error' if category in ['error','danger'] else 'info') }}",
+              title: "{{ message }}",
+              showConfirmButton: false,
+              timer: 4000,
+              timerProgressBar: true
+            });
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    });
+
+    // 2. CAMPO PADRE DINÁMICO
+    const tipoSelect = document.getElementById('user-tipo');
+    const parentField = document.getElementById('parent-field');
+    if(tipoSelect){
+        tipoSelect.addEventListener('change', function(){
+            if(this.value === 'sub_arenera'){
+                parentField.style.display = 'block';
+            } else {
+                parentField.style.display = 'none';
+            }
+        });
+    }
+
+    // 3. CONFIRM DELETE
+    function confirmDelete(url, name) {
+      Swal.fire({
+        title: '¿Eliminar usuario?',
+        text: `Se borrará a "${name}".`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#9ca3af',
+        confirmButtonText: 'Sí, borrar',
+        cancelButtonText: 'Cancelar'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          window.location.href = url;
+        }
+      });
+    }
+    
+    // 4. RESET PASSWORD (NUEVO SCRIPT DE SEGURIDAD)
+    function promptResetPassword(userId, username) {
+      Swal.fire({
+        title: `Cambiar clave a ${username}`,
+        input: 'text',
+        inputLabel: 'Ingresa la nueva contraseña temporal',
+        inputPlaceholder: 'Ej: Transporte2025',
+        showCancelButton: true,
+        confirmButtonText: 'Guardar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#f59e0b',
+        inputValidator: (value) => {
+          if (!value) {
+            return '¡Debes escribir una contraseña!'
+          }
+        }
+      }).then((result) => {
+        if (result.isConfirmed && result.value) {
+          // Crear un formulario invisible y enviarlo
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = "{{ url_for('reset_password_admin') }}";
+
+          const idInput = document.createElement('input');
+          idInput.type = 'hidden';
+          idInput.name = 'user_id';
+          idInput.value = userId;
+
+          const passInput = document.createElement('input');
+          passInput.type = 'hidden';
+          passInput.name = 'new_password';
+          passInput.value = result.value;
+          
+          // Importante para CSRF si lo activamos después (por ahora funciona sin)
+          // const csrfInput = document.createElement('input'); ...
+
+          form.appendChild(idInput);
+          form.appendChild(passInput);
+          document.body.appendChild(form);
+          form.submit();
+        }
+      });
+    }
+
+    // 5. LOADING SYNC
+    function showSyncLoading(e) {
+        e.preventDefault();
+        const url = e.currentTarget.getAttribute('href');
+        Swal.fire({
+          title: 'Sincronizando...',
+          text: 'Consultando SharePoint y Azure.',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+            window.location.href = url;
+          }
+        });
+    }
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

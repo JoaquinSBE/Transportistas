@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="es" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Liquidación de Fletes | Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --card-radius: 12px;
+    }
+
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: 60px;
+    }
+
+    /* --- NAVBAR --- */
+    .navbar-glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    /* --- CARDS --- */
+    .card-custom {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      margin-bottom: 1.5rem;
+    }
+    
+    .card-header-custom {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #f3f4f6;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* --- TABLA --- */
+    .table-custom th {
+      background-color: #f8fafc;
+      color: #64748b;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid #e2e8f0;
+      padding-top: 12px; padding-bottom: 12px;
+    }
+    .table-custom td {
+      vertical-align: middle;
+      font-size: 0.9rem;
+      color: #334155;
+      border-bottom: 1px solid #f1f5f9;
+      padding: 10px 12px;
+    }
+    /* Alineación de números perfecta */
+    .num-col {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-family: 'Inter', monospace; /* Opcional: usar monospace para facturas */
+    }
+    
+    /* --- BADGES & VALUES --- */
+    .val-bad { color: #ef4444; font-weight: 600; }
+    .val-ok { color: #2563eb; font-weight: 700; }
+    
+    /* --- RESUMEN FINAL (FACTURA STYLE) --- */
+    .summary-card {
+      background: linear-gradient(to right, #eff6ff, #fff);
+      border: 1px solid #bfdbfe;
+    }
+    .sum-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #64748b;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .sum-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1e40af;
+    }
+    .sum-value-sm {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #3b82f6;
+    }
+    
+    /* --- FORMS --- */
+    .form-label-sm { font-size: 0.75rem; font-weight: 600; color: #64748b; text-transform: uppercase; }
+    .form-control, .form-select { border-radius: 8px; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar navbar-expand-lg navbar-glass mb-4">
+    <div class="container-xl">
+      <a class="navbar-brand fw-bold text-dark" href="#">
+        <i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Control Fletes
+      </a>
+      <div class="ms-auto d-flex gap-2">
+         <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left me-1"></i> Volver
+         </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-xl">
+
+    <div class="card-custom p-4">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label-sm">Transportista</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white text-muted"><i class="fa-solid fa-truck"></i></span>
+                    <select name="transportista_id" class="form-select" onchange="this.form.submit()">
+                        <option value="none">Seleccionar Transportista...</option>
+                        {% for t in transportistas %}
+                            <option value="{{ t.id }}" {{ 'selected' if sel_tid|string == t.id|string else '' }}>{{ t.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="col-md-2">
+                <label class="form-label-sm">Criterio Fecha</label>
+                <select name="mode" class="form-select">
+                    <option value="cert" {{ 'selected' if date_mode=='cert' else '' }}>Certificación</option>
+                    <option value="travel" {{ 'selected' if date_mode=='travel' else '' }}>Viaje Real</option>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label-sm">Desde</label>
+                <input type="date" name="start" class="form-control" value="{{ start }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label-sm">Hasta</label>
+                <input type="date" name="end" class="form-control" value="{{ end }}">
+            </div>
+
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fa-solid fa-magnifying-glass me-2"></i>Ver
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% if selected_trans %}
+        
+        <div class="d-flex flex-wrap justify-content-between align-items-end mb-3">
+            <div>
+                <h2 class="h4 mb-1 fw-bold text-dark">{{ selected_trans.username }}</h2>
+                <div class="d-flex gap-3 text-muted small">
+                    <span><i class="fa-solid fa-tag me-1"></i>Base: <strong>${{ selected_trans.custom_price }} / Tn</strong></span>
+                    <span><i class="fa-regular fa-clock me-1"></i>Pago: <strong>{{ selected_trans.payment_days }} días</strong></span>
+                </div>
+            </div>
+            <div class="text-end">
+                <div class="badge bg-light text-secondary border mb-1">
+                    {{ 'Por Fecha Certificación' if date_mode=='cert' else 'Por Fecha Viaje' }}
+                </div>
+                <div class="h6 mb-0 text-primary fw-bold">
+                    {{ start.strftime('%d/%m/%Y') }} <span class="text-muted mx-1">➜</span> {{ end.strftime('%d/%m/%Y') }}
+                </div>
+            </div>
+        </div>
+
+        <div class="card-custom">
+            <div class="table-responsive">
+                <table class="table table-custom table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-4">Fecha</th>
+                            <th>Arenera</th>
+                            <th>Remito</th>
+                            <th class="num-col">Tn Llegada</th>
+                            <th class="num-col">Tarifa</th>
+                            <th class="num-col text-danger">Desc. Merma</th>
+                            <th class="num-col">Subtotal</th>
+                            <th class="num-col pe-4">Total (c/IVA)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in shipments %}
+                        <tr>
+                            <td class="ps-4">
+                                <div class="fw-medium">{{ s.date.strftime('%d/%m') }} <span class="text-muted" style="font-size:0.75em">viaje</span></div>
+                                {% if s.cert_fecha and s.cert_fecha != s.date %}
+                                    <div class="text-xs text-muted">{{ s.cert_fecha.strftime('%d/%m') }} cert</div>
+                                {% endif %}
+                            </td>
+                            
+                            <td>{{ s.arenera.username }}</td>
+                            
+                            <td>
+                                <span class="badge bg-light text-dark border">{{ s.final_remito or 'S/D' }}</span>
+                            </td>
+                            
+                            <td class="num-col fw-bold">{{ "%.2f"|format(s.final_peso or 0) }}</td>
+                            
+                            <td class="num-col text-muted">${{ "{:,.0f}".format(s._calc_price) }}</td>
+                            
+                            <td class="num-col">
+                                {% if s._calc_merma > 0 %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                        - ${{ "{:,.0f}".format(s._calc_merma) }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-light">-</span>
+                                {% endif %}
+                            </td>
+                            
+                            <td class="num-col text-dark">${{ "{:,.0f}".format(s._calc_neto) }}</td>
+                            <td class="num-col pe-4 val-ok">${{ "{:,.0f}".format(s._calc_total) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="fa-regular fa-folder-open fa-2x mb-3 opacity-50"></i><br>
+                                No se encontraron viajes certificados en este período.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if shipments %}
+        <div class="card-custom summary-card p-4">
+            <div class="row align-items-center">
+                
+                <div class="col-md-3 border-end">
+                    <div class="sum-label">Volumen Total</div>
+                    <div class="sum-value text-dark">{{ "%.2f"|format(total_tn) }} <span class="fs-6 text-muted">Tn</span></div>
+                </div>
+
+                <div class="col-md-6 border-end px-md-5">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted text-uppercase fw-bold" style="font-size:0.8rem">Neto Gravado</span>
+                        <span class="fw-bold text-dark">${{ "{:,.2f}".format(total_neto) }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted text-uppercase fw-bold" style="font-size:0.8rem">IVA (21%)</span>
+                        <span class="fw-bold text-secondary">${{ "{:,.2f}".format(total_iva) }}</span>
+                    </div>
+                </div>
+
+                <div class="col-md-3 text-end ps-md-4">
+                    <div class="sum-label text-primary">Total a Pagar</div>
+                    <div class="sum-value mb-3">${{ "{:,.2f}".format(total_final) }}</div>
+                    
+                <a href="{{ url_for('preview_send', target_id=selected_trans.id, type='transportista', start=start, end=end, mode=date_mode) }}" 
+                class="btn btn-primary btn-sm w-100" 
+                target="_blank"> <i class="fa-solid fa-envelope me-2"></i>Previsualizar y Enviar
+                </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+    {% else %}
+        <div class="text-center py-5 text-muted opacity-75">
+            <i class="fa-solid fa-arrow-up mb-3 fa-2x"></i>
+            <p>Selecciona un transportista arriba para ver su liquidación.</p>
+        </div>
+    {% endif %}
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

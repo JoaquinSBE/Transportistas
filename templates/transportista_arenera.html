@@ -1,292 +1,347 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
-  <title>{{ assignment.arenera.username }} · Cargar viaje</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Cargar Viaje | {{ assignment.arenera.username }}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
   <style>
-    :root{
-      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
-      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
-      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --bottom-nav-height: 70px;
     }
-    *{ box-sizing:border-box }
-    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; -webkit-text-size-adjust:100%; }
-    .wrap{ max-width:760px; margin:0 auto; padding:16px 12px 80px; }
 
-    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-    .hello{ display:flex; flex-direction:column; }
-    .hello h1{ margin:0; font-size:18px; }
-    .hello .sub{ color:var(--muted); font-size:12px; }
-    .btn-sm{ padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--brand-2); text-decoration:none; font-weight:600; }
-
-    .card{ background:var(--card); border-radius:var(--radius);
-      border:1px solid var(--ring); box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04);
-      margin-top:12px; padding:12px; }
-    .sec-h{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
-    .sec-h h2{ margin:0; font-size:16px; }
-    .sub{ color:var(--muted); font-size:12px; }
-
-    .bar{ height:8px; width:100%; background:#eef2ff; border:1px solid var(--ring); border-radius:8px; overflow:hidden; }
-    .bar > span{ display:block; height:100%; background:linear-gradient(90deg, var(--brand-2), #7aa7ff); width:0%; }
-
-    /* Form */
-    label{ font-size:12px; color:var(--muted); display:block; margin:8px 2px 6px; }
-    .in{ width:100%; min-height:44px; padding:10px 12px; border-radius:12px; border:1px solid var(--ring); background:#fff; color:var(--ink); }
-    .in:focus{ outline:none; border-color:#b5c8ff; box-shadow:0 0 0 3px rgba(37,99,235,.15); }
-    .row{ display:grid; grid-template-columns:1fr; gap:10px; }
-    @media (min-width:560px){ .row.two{ grid-template-columns:1fr 1fr; } }
-    .seg{ display:flex; gap:8px; }
-    .seg button{
-      flex:1; min-height:44px; border:1px solid var(--ring); background:#fff; color:var(--ink);
-      border-radius:12px; font-weight:700; cursor:pointer;
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: calc(var(--bottom-nav-height) + 20px);
     }
-    .seg button.active{ border-color:var(--brand-2); box-shadow:0 0 0 3px rgba(37,99,235,.15); }
 
-    .btn{ width:100%; min-height:46px; padding:12px; border-radius:12px; border:1px solid var(--brand-2);
-      background:var(--brand-2); color:#fff; font-weight:800; }
-    .btn[disabled]{ opacity:.5; pointer-events:none; }
+    /* --- TOP BAR --- */
+    .top-bar {
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .top-title { font-size: 1.1rem; font-weight: 700; color: #111827; margin: 0; }
+    .top-subtitle { font-size: 0.75rem; color: #6b7280; }
 
-    /* Lista de viajes */
-    .list{ display:flex; flex-direction:column; gap:8px; }
-    .trip{ border:1px solid var(--ring); border-radius:12px; background:#fff; padding:10px; }
-    .rowflex{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
-    .t-title{ font-weight:700; }
-    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .pill.ok{ background:#e9f9f2; color:#0d7a5a; border:1px solid #cfeee1; }
-    .pill.warn{ background:#fff3d6; color:#8a5a07; border:1px solid #ffe7a3; }
-    .pill.bad{ background:#ffe4e4; color:#8a1a1a; border:1px solid #f7c2c2; }
-    .meta{ color:var(--muted); font-size:12px; margin-top:4px; }
-    .icon-btn{ border:1px solid var(--ring); background:#fff; color:#b91c1c; border-radius:10px; padding:6px 10px; font-weight:700; cursor:pointer; }
-    .icon-btn:hover{ background:#fff5f5; }
+    /* --- CUPO METER --- */
+    .quota-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1rem;
+      margin: 1rem 0;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .progress-thick { height: 10px; border-radius: 5px; background-color: #f1f5f9; margin-top: 8px; }
+    
+    /* --- FORMULARIO --- */
+    .form-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 1.5rem;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+    }
+    .form-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
+    .form-control-lg { font-size: 1rem; border-radius: 10px; padding: 0.7rem; }
+    .form-control:focus, .form-select:focus { border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
 
-    /* navbar inferior */
-    .nav{ position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring);
-      display:flex; justify-content:space-around; padding:8px 10px; z-index:10; }
-    .nav a{ flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700; padding:10px 8px; border-radius:10px; }
-    .nav a.active{ background:#eef2ff; }
+    /* Segmented Control (M/F) */
+    .segmented-control {
+      display: flex;
+      background: #f3f4f6;
+      border-radius: 10px;
+      padding: 4px;
+    }
+    .segment-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 8px;
+      border-radius: 8px;
+      font-weight: 600;
+      color: #6b7280;
+      transition: all 0.2s;
+    }
+    .segment-btn.active {
+      background: #fff;
+      color: var(--bs-primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    /* Botón Principal */
+    .btn-submit {
+      width: 100%;
+      padding: 1rem;
+      font-size: 1rem;
+      font-weight: 700;
+      border-radius: 12px;
+      background: var(--bs-primary);
+      border: none;
+      box-shadow: 0 4px 6px rgba(37,99,235,0.2);
+    }
+    .btn-submit:disabled { background: #cbd5e1; box-shadow: none; }
+
+    /* --- LISTA VIAJES HOY --- */
+    .trip-item {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 0.8rem;
+      border: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .trip-title { font-weight: 700; color: #1f2937; }
+    .trip-meta { font-size: 0.8rem; color: #6b7280; margin-top: 2px; }
+    
+    .badge-status { font-size: 0.7rem; padding: 4px 8px; border-radius: 6px; font-weight: 600; }
+    .status-viaje { background: #fff7ed; color: #9a3412; border: 1px solid #ffedd5; }
+    .status-llego { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+
+    /* --- BOTTOM NAV --- */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: var(--bottom-nav-height); background: #fff; border-top: 1px solid #e5e7eb;
+      display: flex; justify-content: space-around; align-items: center; z-index: 1000;
+    }
+    .nav-item-link {
+      display: flex; flex-direction: column; align-items: center;
+      text-decoration: none; color: #9ca3af; font-size: 0.75rem; font-weight: 500;
+    }
+    .nav-item-link i { font-size: 1.5rem; margin-bottom: 4px; }
+    .nav-item-link.active { color: var(--bs-primary); }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div class="hello">
-        <h1>{{ assignment.arenera.username }}</h1>
-        <div class="sub">Fecha: {{ date.strftime('%d/%m/%Y') }}</div>
-      </div>
-      <a class="btn-sm" href="{{ url_for('transportista_panel') }}">Volver</a>
+
+  <div class="top-bar">
+    <div>
+        <h1 class="top-title">{{ assignment.arenera.username }}</h1>
+        <div class="top-subtitle">{{ date.strftime('%d/%m/%Y') }}</div>
     </div>
-    
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flashes" style="margin-top:10px;">
-          {% for category, message in messages %}
-            <div class="flash {{ 'success' if category in ['success','ok'] else 'error' }}" 
-                 style="padding:12px 14px; border-radius:12px; font-size:14px; font-weight:600; border:1px solid transparent; cursor:pointer;">
-              {{ message }}
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+    <a href="{{ url_for('transportista_panel') }}" class="btn btn-light btn-sm border">
+        <i class="fa-solid fa-arrow-left"></i> Volver
+    </a>
+  </div>
+
+  <div class="container-xl px-3" style="max-width: 600px;">
 
     {% set used = used or 0 %}
     {% set lim  = limit or 0 %}
     {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
-    <div class="card">
-      <div class="sec-h">
-        <h2>Cupo de hoy</h2>
-        <div class="sub">{{ used }} / {{ lim }} usados</div>
-      </div>
-      <div class="bar"><span style="width:{{ pct }}%"></span></div>
+    
+    <div class="quota-card">
+        <div class="d-flex justify-content-between fw-bold small text-uppercase text-muted mb-1">
+            <span>Cupo Diario</span>
+            <span>{{ used }} / {{ lim }} Usados</span>
+        </div>
+        <div class="progress progress-thick">
+            <div class="progress-bar {{ 'bg-warning' if pct >= 100 else 'bg-primary' }}" 
+                 role="progressbar" style="width: {{ pct }}%"></div>
+        </div>
     </div>
 
-    <div class="card">
-      <div class="sec-h"><h2>Cargar viaje</h2></div>
-      <form method="post" action="">
-        <div class="row">
-          <div>
-            <label>DNI</label>
-            <input class="in" type="text" name="dni" id="dni-input" inputmode="numeric" pattern="[0-9]*" placeholder="44554990" required>
-          </div>
-          <div>
-            <label>Nombre y apellido del chofer</label>
-            <input class="in" type="text" name="nombre_apellido" id="nombre-input" placeholder="Juan Pérez" required>
-          </div>
-        </div>
-
-        <div class="row two">
-          <div>
-            <label>Género</label>
-            <div class="seg" data-name="gender" id="gender-seg">
-              <button type="button" data-val="M" class="active">M</button>
-              <button type="button" data-val="F">F</button>
+    <div class="form-card mb-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-truck-fast text-primary me-2"></i>Nuevo Viaje</h5>
+      
+      <form method="post" action="" id="tripForm">
+        
+        <div class="mb-3">
+            <label class="form-label">DNI Chofer</label>
+            <div class="input-group">
+                <input type="tel" name="dni" id="dni-input" class="form-control form-control-lg" 
+                       placeholder="Ingresa DNI..." required autocomplete="off">
+                <span class="input-group-text bg-white text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
             </div>
-            <input type="hidden" name="gender" value="M" id="gender-input">
-          </div>
-          <div>
-            <label>Tipo</label>
-            <select class="in" name="tipo" id="tipo-select" required>
-              <option value="">Tipo…</option>
-              <option value="Batea">Batea</option>
-              <option value="Bivuelco">Bivuelco</option>
-            </select>
-          </div>
+            <div class="form-text text-xs">Escribe el DNI para autocompletar.</div>
         </div>
 
-        <div class="row two">
-          <div>
-            <label>Patente tractor</label>
-            <input class="in pat" type="text" name="patente_tractor" id="tractor-input" placeholder="AA123BB" required>
-          </div>
-          <div>
-            <label>Patente batea</label>
-            <input class="in pat" type="text" name="patente_batea" id="trailer-input" placeholder="AB123CD" required>
-          </div>
+        <div class="mb-3">
+            <label class="form-label">Nombre y Apellido</label>
+            <input type="text" name="nombre_apellido" id="nombre-input" class="form-control form-control-lg" 
+                   placeholder="Nombre completo" required>
         </div>
 
-        <div style="margin-top:10px;">
-          <button class="btn" type="submit" {{ 'disabled' if lim==0 or used>=lim else '' }}>
-            {{ 'Sin cupo' if lim==0 or used>=lim else 'Agregar envío' }}
-          </button>
+        <div class="row g-3 mb-3">
+            <div class="col-6">
+                <label class="form-label">Género</label>
+                <div class="segmented-control" id="gender-seg">
+                    <button type="button" class="segment-btn active" data-val="M">Masc</button>
+                    <button type="button" class="segment-btn" data-val="F">Fem</button>
+                </div>
+                <input type="hidden" name="gender" value="M" id="gender-input">
+            </div>
+            <div class="col-6">
+                <label class="form-label">Tipo</label>
+                <select class="form-select form-select-lg" name="tipo" id="tipo-select" required>
+                    <option value="" disabled selected>...</option>
+                    <option value="Batea">Batea</option>
+                    <option value="Bivuelco">Bivuelco</option>
+                </select>
+            </div>
         </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-6">
+                <label class="form-label">Patente Tractor</label>
+                <input type="text" name="patente_tractor" id="tractor-input" class="form-control form-control-lg text-uppercase font-monospace" 
+                       placeholder="AA123BB" required>
+            </div>
+            <div class="col-6">
+                <label class="form-label">Patente Batea</label>
+                <input type="text" name="patente_batea" id="trailer-input" class="form-control form-control-lg text-uppercase font-monospace" 
+                       placeholder="AA123BB" required>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-submit" {{ 'disabled' if lim > 0 and used >= lim }}>
+            {% if lim > 0 and used >= lim %}
+                <i class="fa-solid fa-ban me-2"></i>Sin Cupo
+            {% else %}
+                <i class="fa-solid fa-paper-plane me-2"></i>Enviar Camión
+            {% endif %}
+        </button>
+
       </form>
     </div>
 
-    <div class="card">
-      <div class="sec-h"><h2>Mis viajes de hoy</h2></div>
-      {% if shipments and shipments|length %}
-        <div class="list">
-          {% for s in shipments %}
-          <div class="trip">
-            <div class="rowflex">
-              <div class="t-title">{{ s.chofer }} · {{ s.dni }}</div>
-              <div class="actions">
-                {% if s.status == 'Llego' %}
-                  <span class="pill ok">Llegó</span>
-                {% elif s.status == 'En viaje' %}
-                  <span class="pill warn">En viaje</span>
-                  <form method="post" action="" onsubmit="return confirm('¿Eliminar este viaje?');" style="display:inline;">
-                    <input type="hidden" name="delete_id" value="{{ s.id }}">
-                    <button class="icon-btn" type="submit" title="Eliminar">✕</button>
-                  </form>
-                {% else %}
-                  <span class="pill warn"></span>
-                {% endif %}
-              </div>
+    <div class="mb-3">
+        <h6 class="text-muted fw-bold text-uppercase small ps-1">Viajes Cargados Hoy</h6>
+        
+        {% if shipments %}
+            {% for s in shipments %}
+            <div class="trip-item">
+                <div>
+                    <div class="trip-title">{{ s.chofer }}</div>
+                    <div class="trip-meta font-monospace">
+                        {{ s.tractor }} / {{ s.trailer }} • {{ s.tipo }}
+                    </div>
+                </div>
+                
+                <div class="text-end">
+                    {% if s.status == 'Llego' %}
+                        <span class="badge-status status-llego">Llegó</span>
+                    {% else %}
+                        <span class="badge-status status-viaje mb-1 d-inline-block">En Viaje</span>
+                        <form method="post" action="" onsubmit="return confirm('¿Borrar este viaje?');">
+                            <input type="hidden" name="delete_id" value="{{ s.id }}">
+                            <button type="submit" class="btn btn-sm btn-link text-danger p-0 text-decoration-none" style="font-size:0.8rem;">
+                                <i class="fa-solid fa-trash"></i> Borrar
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
             </div>
-            <div class="meta">
-              {{ s.tipo }} · Tractor: {{ s.tractor }} · Batea: {{ s.trailer }}
+            {% endfor %}
+        {% else %}
+            <div class="text-center py-4 text-muted border rounded-3 bg-white">
+                <small>No hay envíos registrados hoy.</small>
             </div>
-          </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <div class="sub">Aún no cargaste viajes hoy.</div>
-      {% endif %}
+        {% endif %}
     </div>
+
   </div>
 
-  <nav class="nav">
-    <a href="{{ url_for('transportista_panel') }}">Inicio</a>
-    <a href="{{ url_for('transportista_quotas') }}">Cuotas</a>
-    <a href="{{ url_for('transportista_history') }}">Historial</a>
+  <nav class="bottom-nav">
+    <a href="{{ url_for('transportista_panel') }}" class="nav-item-link">
+        <i class="fa-solid fa-house"></i><span>Inicio</span>
+    </a>
+    <a href="{{ url_for('transportista_quotas') }}" class="nav-item-link">
+        <i class="fa-solid fa-calendar-check"></i><span>Cupos</span>
+    </a>
+    <a href="#" class="nav-item-link active">
+        <i class="fa-solid fa-plus-circle"></i><span>Cargar</span>
+    </a>
+    <a href="{{ url_for('transportista_history') }}" class="nav-item-link">
+        <i class="fa-solid fa-clock-rotate-left"></i><span>Historial</span>
+    </a>
   </nav>
 
   <script>
-    // URL de la API (asumiendo que /api/choferes/mine ya existe en app.py)
+    // API URL (Generada por Flask)
     const API_URL = '{{ url_for("api_choferes_mine") }}';
     let choferes_data = {};
 
-    // --- Funciones del Segmented Control (Género) ---
-    function setupSegmentedControl(containerId, hiddenInputId) {
-        const seg = document.getElementById(containerId);
-        const hidden = document.getElementById(hiddenInputId);
+    document.addEventListener('DOMContentLoaded', async () => {
+        // 1. Cargar Choferes para Autocomplete
+        try {
+            const res = await fetch(API_URL);
+            if (res.ok) {
+                const data = await res.json();
+                data.forEach(c => choferes_data[c.dni] = c);
+            }
+        } catch (e) { console.error("Error cargando choferes", e); }
+
+        // 2. Lógica Segmented Control (M/F)
+        const segBtns = document.querySelectorAll('.segment-btn');
+        const genderInput = document.getElementById('gender-input');
         
-        if (!seg || !hidden) return (val) => {};
-
-        function updateState(val) {
-            val = val || 'M';
-            seg.querySelectorAll('button').forEach(b => {
-                const isActive = b.getAttribute('data-val') === val;
-                b.classList.toggle('active', isActive);
+        segBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                segBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                genderInput.value = btn.dataset.val;
             });
-            hidden.value = val;
-        }
+        });
 
-        seg.addEventListener('click', e => {
-            if (e.target.tagName === 'BUTTON') {
-                updateState(e.target.getAttribute('data-val'));
+        // 3. Autocomplete DNI
+        const dniInput = document.getElementById('dni-input');
+        dniInput.addEventListener('input', function() {
+            const val = this.value.trim();
+            const data = choferes_data[val];
+            
+            if (data) {
+                document.getElementById('nombre-input').value = data.nombre;
+                document.getElementById('tractor-input').value = data.tractor || '';
+                document.getElementById('trailer-input').value = data.trailer || '';
+                if (data.tipo) document.getElementById('tipo-select').value = data.tipo;
+                
+                // Set Gender
+                const gVal = data.gender || 'M';
+                segBtns.forEach(b => b.classList.toggle('active', b.dataset.val === gVal));
+                genderInput.value = gVal;
             }
         });
-        return updateState;
-    }
 
-    // --- Lógica de Autocompletado (AJAX) ---
-
-    // 1. Obtener y mapear datos de choferes
-    async function fetchChoferes() {
-        try {
-            const response = await fetch(API_URL);
-            if (!response.ok) throw new Error('Error de red al obtener choferes.');
-            const data = await response.json();
-            
-            // Mapeamos los datos por DNI para acceso rápido
-            data.forEach(c => {
-                choferes_data[c.dni] = c;
-            });
-        } catch (error) {
-            console.error("Error al obtener la lista de choferes:", error);
-        }
-    }
-
-    // 2. Inicializar controles y fetch de datos
-    const updateGender = setupSegmentedControl('gender-seg', 'gender-input');
-
-    const dniInput = document.getElementById('dni-input');
-    const nombreInput = document.getElementById('nombre-input');
-    const tractorInput = document.getElementById('tractor-input');
-    const trailerInput = document.getElementById('trailer-input');
-    const tipoSelect = document.getElementById('tipo-select');
-
-    // Cargar la lista de choferes al cargar la página
-    fetchChoferes();
-
-
-    // 3. Listener principal para el autocompletado
-    dniInput.addEventListener('input', function() {
-        const dni = this.value.trim();
-        const chofer = choferes_data[dni];
-
-        if (chofer) {
-            // Rellenar campos
-            nombreInput.value = chofer.nombre;
-            tractorInput.value = (chofer.tractor || '').toUpperCase();
-            trailerInput.value = (chofer.trailer || '').toUpperCase();
-            
-            // Si el tipo existe en el select, lo seleccionamos; si no, queda en "Tipo..."
-            tipoSelect.value = chofer.tipo || ''; 
-            
-            // Actualiza los botones M/F
-            updateGender(chofer.gender);
-            
-            // Movemos el foco para indicar que se complete
-            nombreInput.focus(); 
-        } else {
-            // Limpiar si el DNI no coincide
-            nombreInput.value = '';
-            tractorInput.value = '';
-            trailerInput.value = '';
-            tipoSelect.value = ''; // Limpiar el tipo
-            updateGender('M'); // Resetear género
-        }
-    });
-
-    // 4. Patentes: mayúsculas, sin espacios
-    document.querySelectorAll('.pat').forEach(inp=>{
-      inp.addEventListener('input', ()=>{ inp.value = (inp.value || '').toUpperCase().replace(/\s+/g,''); });
+        // 4. Flash Messages
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: "{{ 'success' if category in ['ok','success'] else 'error' }}",
+                        title: "{{ message }}",
+                        showConfirmButton: false,
+                        timer: 3000
+                    });
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
     });
   </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

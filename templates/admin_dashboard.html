@@ -1,284 +1,424 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
-  <title>Dashboard · Transportistas</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <style>
-    :root{
-      /* mismos tokens que admin_panel */
-      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
-      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
-      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
-    }
-    *{ box-sizing:border-box }
-    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
-    a{ color:var(--brand-2); text-decoration:none } a:hover{ text-decoration:underline }
-    .wrap{ max-width:1200px; margin:28px auto; padding:0 16px; }
-    .header{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
-    .header h1{ margin:0; font-size:28px }
-    .actions{ display:flex; gap:8px; flex-wrap:wrap }
-    .btn{
-      min-height:36px; padding:8px 14px; border-radius:10px; cursor:pointer;
-      border:1px solid var(--brand-2); background:var(--brand-2); color:#fff; font-weight:600; text-decoration:none;
-      display:inline-flex; align-items:center; gap:6px;
-    }
-    .btn.outline{ background:#fff; color:var(--brand-2); }
-    .card{
-      background:var(--card); border-radius:var(--radius);
-      box-shadow:0 1px 2px rgba(15,23,42,.06), 0 6px 14px rgba(2,6,23,.04);
-      border:1px solid var(--ring); display:flex; flex-direction:column; min-width:0;
-    }
-    .card-h{ padding:14px 16px; border-bottom:1px solid var(--ring); display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
-    .card-h h3{ margin:0; font-size:18px }
-    .card-b{ padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
-    .grid{ display:grid; gap:16px }
-    .grid-kpi{ grid-template-columns:repeat(2,1fr); }
-    .grid-bottom{ grid-template-columns:1fr 1fr; }
-    @media (max-width:1000px){ .grid-kpi,.grid-bottom{ grid-template-columns:1fr 1fr } }
-    @media (max-width:640px){ .grid-kpi{ grid-template-columns:1fr } .grid-bottom{ grid-template-columns:1fr } }
-    .kpi{
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      text-align:center;
-      gap:2px;
-      min-height:flex;
-    }
-    .kpi .label{ font-size:12px; color:var(--muted) }
-    .kpi .value{ font-size:28px; font-weight:700 }
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Operativo</title>
 
-    /* toolbar filtros */
-    .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
-    .field{ display:flex; flex-direction:column; gap:6px; }
-    label{ font-size:12px; color:var(--muted) }
-    .in{
-      min-height:36px; padding:8px 10px; border-radius:10px; border:1px solid var(--ring);
-      background:#fff; color:var(--ink);
-    }
-
-    /* tablas */
-    .table-wrap{ overflow:auto; -webkit-overflow-scrolling:touch; }
-    table{ width:100%; border-collapse:separate; border-spacing:0; }
-    th,td{ padding:10px 12px; border-bottom:1px solid var(--ring); font-size:14px; text-align:left; white-space:nowrap; }
-    th{ color:var(--muted); background:#fafbff; font-weight:600; position:sticky; top:0; }
-    tr:last-child td{ border-bottom:none; }
-    .muted{ color:var(--muted) }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --card-radius: 12px;
+    }
+    body { font-family: var(--bs-font-sans-serif); background-color: var(--bs-body-bg); padding-bottom: 40px; }
+    
+    /* Navbar */
+    .navbar-glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 1000; }
+
+    /* Cards */
+    .card-custom { background: #fff; border: 1px solid #e5e7eb; border-radius: var(--card-radius); box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: 100%; display: flex; flex-direction: column; }
+    .card-header-custom { padding: 1rem 1.25rem; border-bottom: 1px solid #f3f4f6; display: flex; justify-content: space-between; align-items: center; }
+    .card-title-custom { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; color: #6b7280; margin: 0; letter-spacing: 0.05em; }
+
+    /* KPIs */
+    .kpi-value { font-size: 1.8rem; font-weight: 700; color: #111827; line-height: 1.2; }
+    .kpi-sub { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; }
+    
+    /* Listas */
+    .list-scroll-area { overflow-y: auto; flex: 1; padding: 0; max-height: 320px; }
+    .payment-item { padding: 0.75rem 1.25rem; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; }
+    .pay-date-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; width: 45px; padding: 4px; text-align: center; margin-right: 1rem; }
+    .pay-day { font-size: 1.1rem; font-weight: 800; line-height: 1; color: #334155; }
+    .pay-month { font-size: 0.6rem; text-transform: uppercase; color: #64748b; }
+  </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="header">
-      <h1>Dashboard</h1>
-      <div class="actions">
-        <a class="btn outline" href="{{ url_for('admin_panel') }}">Volver al panel</a>
-        <a class="btn" href="{{ url_for('logout') }}">Cerrar sesión</a>
+
+  <nav class="navbar navbar-expand-lg navbar-glass mb-4">
+    <div class="container-xl">
+      <a class="navbar-brand fw-bold text-dark" href="#">
+        <i class="fa-solid fa-chart-line text-primary me-2"></i>Dashboard
+      </a>
+      <div class="ms-auto d-flex gap-2">
+         <a href="{{ url_for('admin_resumen') }}" class="btn btn-sm btn-primary-soft text-primary fw-medium bg-primary-subtle">
+            <i class="fa-solid fa-table me-1"></i> Resumen
+         </a>
+         {% if session.get('tipo') == 'admin' %}
+         <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left me-1"></i> Panel
+         </a>
+         {% endif %}
+         <a href="{{ url_for('logout') }}" class="btn btn-sm btn-light text-danger" title="Cerrar Sesión">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i>
+        </a>
       </div>
     </div>
+  </nav>
 
-    <!-- Filtros -->
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-h">
-        <h3>Filtros</h3>
-        <div class="muted" id="lblRango">—</div>
-      </div>
-      <div class="card-b">
-        <div class="toolbar">
-          <div class="field">
-            <label for="range">Rango</label>
-            <select id="range" class="in">
-              <option value="today">Hoy</option>
-              <option value="week">Últimos 7 días</option>
-              <option value="month">Mes actual</option>
-              <option value="custom">Personalizado</option>
+  <div class="container-xl">
+    
+    <div class="card-custom mb-4 p-3">
+      <div class="row g-3 align-items-center">
+        <div class="col-md-auto">
+          <label class="small text-muted fw-bold me-2">Rango:</label>
+          <select id="range" class="form-select form-select-sm d-inline-block w-auto">
+            <option value="month" selected>Este Mes</option>
+            <option value="week">Últimos 7 días</option>
+            <option value="today">Hoy</option>
+            <option value="custom">Personalizado...</option>
+          </select>
+        </div>
+
+        <div class="col-md-auto" id="custom-dates" style="display:none;">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text bg-light">Desde</span>
+            <input type="date" id="start_date" class="form-control">
+            <span class="input-group-text bg-light">Hasta</span>
+            <input type="date" id="end_date" class="form-control">
+          </div>
+        </div>
+
+        <div class="col-md-auto">
+            <label class="small text-muted fw-bold me-2">Arenera:</label>
+            <select id="arenera_id" class="form-select form-select-sm d-inline-block w-auto">
+                <option value="all">Todas las Plantas</option>
+                {% for a in areneras %}
+                <option value="{{ a.id }}">{{ a.username }}</option>
+                {% endfor %}
             </select>
-          </div>
-          <div class="field">
-            <label for="from">Desde</label>
-            <input id="from" type="date" class="in" disabled>
-          </div>
-          <div class="field">
-            <label for="to">Hasta</label>
-            <input id="to" type="date" class="in" disabled>
-          </div>
-          <div class="field">
-            <label>Transportista</label>
-            <input id="tname" class="in" type="text" placeholder="usuario…">
-          </div>
-          <button id="apply" class="btn" type="button">Aplicar</button>
+        </div>
+
+        <div class="col ms-md-auto text-end">
+          <button id="refresh" class="btn btn-primary btn-sm px-3">
+            <i class="fa-solid fa-rotate me-1"></i> Actualizar
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- KPIs -->
-    <div class="grid grid-kpi">
-      <div class="card">
-        <div class="card-b">
-          <div class="kpi">
+    <div class="row g-3 mb-4">
+      
+      <div class="col-sm-6 col-lg-3">
+        <div class="card-custom p-3 border-start border-4 border-secondary">
+          <div class="d-flex justify-content-between">
             <div>
-              <div class="label">Movimientos</div>
-              <div class="value" id="k_total">0</div>
+              <div class="kpi-sub text-secondary">Hacia Arenera</div>
+              <div class="kpi-value" id="k_to_source">0</div>
+            </div>
+            <div class="text-secondary opacity-25"><i class="fa-solid fa-truck-arrow-right fa-2x"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-sm-6 col-lg-3">
+        <div class="card-custom p-3 border-start border-4 border-warning">
+          <div class="d-flex justify-content-between">
+            <div>
+              <div class="kpi-sub text-warning">Hacia SBE (Cargados)</div>
+              <div class="d-flex align-items-baseline gap-1">
+                  <div class="kpi-value" id="k_to_dest">0</div>
+                  <small class="text-muted fw-bold" style="font-size:0.9rem">
+                    (<span id="k_tn_dest">0</span> Tn)
+                  </small>
+              </div>
+            </div>
+            <div class="text-warning opacity-25"><i class="fa-solid fa-truck-fast fa-2x"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-sm-6 col-lg-3">
+        <div class="card-custom p-3 border-start border-4 border-success">
+          <div class="d-flex justify-content-between">
+            <div>
+              <div class="kpi-sub text-success">Descargados SBE</div>
+              
+              <div class="d-flex align-items-baseline">
+                <div class="kpi-value" id="k_arrived">0</div> 
+                <small class="text-muted fw-bold ms-2" style="font-size:0.9rem">
+                    (<span id="k_tn_arrived">0</span> Tn)
+                </small>
+              </div>
+              
             </div>
           </div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-b">
-          <div class="kpi">
+
+      <div class="col-sm-6 col-lg-3">
+        <div class="card-custom p-3 border-start border-4 border-primary">
+          <div class="d-flex justify-content-between">
             <div>
-              <div class="label">En viaje</div>
-              <div class="value" id="k_viaje">0</div>
+              <div class="kpi-sub text-primary">Total Proyectado</div>
+              <div class="kpi-value text-dark" id="k_money" style="font-size:1.5rem">$0</div>
+            </div>
+            <div class="text-primary opacity-25"><i class="fa-solid fa-sack-dollar fa-2x"></i></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="row g-4 mb-4">
+      
+      <div class="col-lg-8">
+        <div class="card-custom">
+          <div class="card-header-custom">
+            <h3 class="card-title-custom"><i class="fa-solid fa-chart-area me-2"></i>Evolución de Carga</h3>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-primary active" onclick="setChartMode('out', this)" id="btn-out">Despachado</button>
+                <button class="btn btn-outline-primary" onclick="setChartMode('in', this)" id="btn-in">Recibido</button>
             </div>
           </div>
+          <div class="card-body position-relative" style="height: 320px;">
+            <canvas id="tonChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="card-custom">
+          <div class="card-header-custom bg-light">
+            <h3 class="card-title-custom text-dark">
+                <i class="fa-regular fa-calendar-check me-2"></i>Próximos Vencimientos
+            </h3>
+          </div>
+          <div class="list-scroll-area" id="pay-container">
+             </div>
+          <div class="p-2 text-center bg-light border-top">
+            <small class="text-muted" style="font-size:0.7rem;"><i class="fa-solid fa-circle-info me-1"></i>Valores IVA Incluido</small>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <div class="card-custom">
+          <div class="card-header-custom">
+             <h3 class="card-title-custom"><i class="fa-solid fa-layer-group me-2"></i>Volumen por Origen</h3>
+          </div>
+          <div class="card-body list-scroll-area px-3 pt-3" id="arenera-list"></div>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <div class="card-custom">
+          <div class="card-header-custom">
+             <h3 class="card-title-custom"><i class="fa-solid fa-trophy me-2"></i>Top Transportistas</h3>
+          </div>
+          <div class="card-body position-relative" style="height: 300px; display: flex; justify-content: center;">
+             <canvas id="transChart"></canvas>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Serie temporal -->
-    <div class="card" style="margin-top:16px;">
-      <div class="card-h"><h3>Movimientos por día</h3></div>
-      <div class="card-b">
-        <canvas id="series" height="120"></canvas>
-      </div>
-    </div>
-
-    <!-- Tablas -->
-    <div class="grid grid-bottom" style="margin-top:16px;">
-      <div class="card">
-        <div class="card-h"><h3>Por arenera</h3></div>
-        <div class="card-b">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Arenera</th><th>Total</th><th>En viaje</th></tr>
-              </thead>
-              <tbody id="tb_arenera"></tbody>
-            </table>
-          </div>
-          <div class="muted" id="na_arenera" style="display:none;">Sin datos en el rango.</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-h"><h3>Por transportista</h3></div>
-        <div class="card-b">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Transportista</th><th>Total</th><th>En viaje</th></tr>
-              </thead>
-              <tbody id="tb_transp"></tbody>
-            </table>
-          </div>
-          <div class="muted" id="na_transp" style="display:none;">Sin datos en el rango.</div>
-        </div>
-      </div>
-    </div>
   </div>
-<script>
-let chart = null;
 
-function enableCustomDates(on){
-  document.getElementById('from').disabled = !on;
-  document.getElementById('to').disabled   = !on;
-}
+  <script>
+    let chartInstance = null;
+    let pieInstance = null;
+    let currentData = null;
+    let chartMode = 'out';
 
-document.getElementById('range').addEventListener('change', e=>{
-  enableCustomDates(e.target.value === 'custom');
-});
+    const rangeSelect = document.getElementById('range');
+    const customDates = document.getElementById('custom-dates');
+    rangeSelect.addEventListener('change', () => {
+      customDates.style.display = (rangeSelect.value === 'custom') ? 'block' : 'none';
+    });
+    
+    const todayISO = new Date().toISOString().split('T')[0];
+    document.getElementById('start_date').value = todayISO;
+    document.getElementById('end_date').value = todayISO;
 
-document.getElementById('apply').addEventListener('click', loadData);
+    // --- CARGA DE DATOS ---
+    async function loadData() {
+      const btnRefresh = document.getElementById('refresh');
+      btnRefresh.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+      btnRefresh.disabled = true;
 
-function collectFilters(){
-  const range = document.getElementById('range').value;
-  const from  = document.getElementById('from').value;
-  const to    = document.getElementById('to').value;
-  const tname = document.getElementById('tname').value.trim().toLowerCase();
+      try {
+        const res = await fetch('{{ url_for("admin_dashboard_data") }}', {
+          method: 'POST', 
+          headers: {'Content-Type': 'application/json'}, 
+          body: JSON.stringify({
+            range: rangeSelect.value,
+            arenera_id: document.getElementById('arenera_id').value,
+            start: document.getElementById('start_date').value,
+            end: document.getElementById('end_date').value
+          })
+        });
+        
+        if(!res.ok) throw new Error('Error en servidor');
+        
+        const d = await res.json();
+        currentData = d;
 
-  const body = { transportista: tname };
-  if (range === 'custom') {
-    if (from) body.from = from;
-    if (to)   body.to   = to;
-  } else {
-    body.range = range;
-  }
-  return body;
-}
+        updateKpiDisplay();
+        updateMainChart();
+        renderAreneras(d.arenera_stats);
+        renderPayments(d.payments_table);
+        renderTransChart(d.top_trans);
 
-async function loadData(){
-  const body = collectFilters();
-
-  const rsp = await fetch('{{ url_for("admin_dashboard_data") }}', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body)
-  });
-  const d = await rsp.json();
-
-  // KPIs
-  const k = d.kpi || {};
-  document.getElementById('k_total').textContent  = k.total ?? 0;
-  document.getElementById('k_viaje').textContent  = k.en_viaje ?? 0;
-  document.getElementById('lblRango').textContent = k.rango ? `${k.rango.from} al ${k.rango.to}` : '—';
-
-  // Tablas
-  const ar = d.por_arenera || [];
-  const tr = d.por_transportista || [];
-
-  const tA = document.getElementById('tb_arenera'); tA.innerHTML='';
-  document.getElementById('na_arenera').style.display = ar.length ? 'none' : 'block';
-  ar.forEach(r=>{
-    const row = document.createElement('tr');
-    row.innerHTML = `<td>${r.arenera}</td><td style="text-align:right;">${r.total}</td><td style="text-align:right;">${r.en_viaje}</td>`;
-    tA.appendChild(row);
-  });
-
-  const tT = document.getElementById('tb_transp'); tT.innerHTML='';
-  document.getElementById('na_transp').style.display = tr.length ? 'none' : 'block';
-  tr.forEach(r=>{
-    const row = document.createElement('tr');
-    row.innerHTML = `<td>${r.transportista}</td><td style="text-align:right;">${r.total}</td><td style="text-align:right;">${r.en_viaje}</td>`;
-    tT.appendChild(row);
-  });
-
-  // Serie temporal (solo En viaje)
-  const timeline = d.timeline || {};
-  const labels = timeline.labels || [];
-  const viaje  = timeline.en_viaje || [];
-
-  const ctx = document.getElementById('series').getContext('2d');
-  if (chart) chart.destroy();
-  chart = new Chart(ctx, {
-    type:'line',
-    data:{
-      labels,
-      datasets:[
-        {
-          label:'En viaje',
-          data:viaje,
-          borderColor:'#f59e0b',
-          backgroundColor:'rgba(245,158,11,.15)',
-          pointBackgroundColor:'#f59e0b',
-          tension:.25,
-          pointRadius:4,
-          fill:false
-        }
-      ]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      scales:{ y:{ beginAtZero:true } },
-      plugins:{ legend:{ position:'bottom' } }
+      } catch (e) { 
+        console.error(e);
+        alert('Error cargando datos');
+      } finally {
+        btnRefresh.innerHTML = '<i class="fa-solid fa-rotate me-1"></i> Actualizar';
+        btnRefresh.disabled = false;
+      }
     }
-  });
-}
 
-// init
-enableCustomDates(false);
-loadData();
-</script>
+    // --- ACTUALIZAR TARJETAS (NUEVA LÓGICA) ---
+    function updateKpiDisplay() {
+        if (!currentData) return;
+        const k = currentData.kpi;
+
+        // Mapeo directo de las variables calculadas en Python
+        animateValue('k_to_source', k.to_source);
+        animateValue('k_to_dest', k.to_dest);
+        animateValue('k_tn_dest', Math.round(k.tn_to_dest));
+        animateValue('k_arrived', k.arrived);
+        animateValue('k_tn_arrived', Math.round(k.tn_in));
+        
+        // Dinero
+        const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(k.costo_total);
+        document.getElementById('k_money').innerText = money;
+    }
+
+    function animateValue(id, end) {
+        const obj = document.getElementById(id);
+        if (!obj) return;
+        if (typeof end !== 'number') { obj.innerText = end; return; } 
+        
+        let start = parseInt(obj.innerText.replace(/\D/g,'')) || 0;
+        if (start === end) { obj.innerText = end; return; }
+        
+        let current = start;
+        const range = end - start;
+        const step = Math.ceil(range / 15) || (range > 0 ? 1 : -1);
+        
+        const timer = setInterval(() => {
+            current += step;
+            if ((step > 0 && current >= end) || (step < 0 && current <= end)) {
+                current = end;
+                clearInterval(timer);
+            }
+            obj.innerText = current.toLocaleString('es-AR');
+        }, 20);
+    }
+
+    // --- RESTO DE FUNCIONES VISUALES ---
+    function renderPayments(list) {
+        const container = document.getElementById('pay-container');
+        container.innerHTML = '';
+        
+        const getMonthName = (m) => ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][parseInt(m)-1] || m;
+
+        if (!list || list.length === 0) { 
+            container.innerHTML = '<div class="text-center py-5 text-muted"><i class="fa-regular fa-calendar-xmark fa-2x mb-2 opacity-50"></i><br>Sin vencimientos</div>'; 
+            return; 
+        }
+
+        list.forEach(p => {
+            const m = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(p.monto);
+            const [d, mth] = p.fecha.split('/');
+            
+            let badge = '';
+            if (p.tipo === 'Arena') {
+                badge = `<span style="font-size:9px; background:#fff7ed; color:#c2410c; padding:2px 5px; border-radius:4px; border:1px solid #ffedd5; font-weight:700; margin-left:5px;">ARENA</span>`;
+            } else {
+                badge = `<span style="font-size:9px; background:#eff6ff; color:#1e40af; padding:2px 5px; border-radius:4px; border:1px solid #dbeafe; font-weight:700; margin-left:5px;">FLETE</span>`;
+            }
+
+            const html = `
+              <div class="payment-item">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div class="pay-date-box">
+                    <div class="pay-day">${d}</div>
+                    <div class="pay-month">${getMonthName(mth)}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:#334155; line-height:1.3;">
+                        ${p.entidad} ${badge}
+                    </div>
+                    <small style="color:#94a3b8; font-size:11px;">${p.dia_semana} • ${p.count} viajes</small>
+                  </div>
+                </div>
+                <div style="font-weight:700; color:#059669; font-size:14px;">${m}</div>
+              </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+        });
+    }
+
+    function setChartMode(mode, el) {
+      chartMode = mode;
+      document.getElementById('btn-out').classList.remove('active');
+      document.getElementById('btn-in').classList.remove('active');
+      el.classList.add('active');
+      updateMainChart();
+    }
+
+    function updateMainChart() {
+      if (!currentData) return;
+      const ctx = document.getElementById('tonChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+      const isOut = (chartMode === 'out');
+      
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: currentData.chart_data.labels,
+          datasets: [{
+            label: isOut ? 'Tn Despachadas' : 'Tn Recibidas',
+            data: isOut ? currentData.chart_data.out : currentData.chart_data.in,
+            borderColor: isOut ? '#2563eb' : '#059669',
+            backgroundColor: isOut ? 'rgba(37, 99, 235, 0.1)' : 'rgba(5, 150, 105, 0.1)',
+            fill: true, tension: 0.3, pointRadius: 3
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } }
+      });
+    }
+
+    function renderAreneras(list) {
+      const c = document.getElementById('arenera-list'); c.innerHTML = '';
+      if (!list.length) { c.innerHTML = '<div class="text-center text-muted py-4">Sin datos</div>'; return; }
+      const max = Math.max(...list.map(i => i.value));
+      list.forEach(i => {
+        const pct = (i.value / max) * 100;
+        c.insertAdjacentHTML('beforeend', `
+          <div class="mb-3"><div class="d-flex justify-content-between small mb-1"><span class="fw-bold text-dark">${i.name}</span><span class="fw-bold text-primary">${i.value.toFixed(1)} Tn</span></div><div class="progress" style="height:6px;"><div class="progress-bar bg-primary" style="width:${pct}%"></div></div></div>`);
+      });
+    }
+
+    function renderTransChart(data) {
+      const ctx = document.getElementById('transChart').getContext('2d');
+      if (pieInstance) pieInstance.destroy();
+      pieInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels: data.labels, datasets: [{ data: data.values, backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'], borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } }, layout: { padding: 10 } }
+      });
+    }
+
+    document.getElementById('refresh').addEventListener('click', loadData);
+    loadData(); 
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

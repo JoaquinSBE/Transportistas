@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="es" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuración | Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --card-radius: 12px;
+    }
+
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: 100px; /* Espacio para la barra flotante */
+    }
+
+    /* --- NAVBAR --- */
+    .navbar-glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    /* --- CARDS --- */
+    .card-custom {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+    
+    .card-header-custom {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #f3f4f6;
+      background-color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-title-custom {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #111827;
+      margin: 0;
+    }
+
+    /* --- TABLAS CONFIG --- */
+    .table-config th {
+      background-color: #f9fafb;
+      color: #6b7280;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .table-config td {
+      padding: 12px 16px;
+      vertical-align: middle;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .table-config tr:last-child td { border-bottom: none; }
+
+    /* --- INPUTS DENTRO DE TABLA --- */
+    .form-control-sm, .form-select-sm {
+      font-size: 0.85rem;
+      border-radius: 6px;
+      border-color: #d1d5db;
+    }
+    .form-control-sm:focus, .form-select-sm:focus {
+      border-color: var(--bs-primary);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+    }
+
+    /* --- BARRA FLOTANTE DE GUARDADO --- */
+    .floating-save-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: #fff;
+      border-top: 1px solid #e5e7eb;
+      padding: 1rem;
+      display: flex;
+      justify-content: center; /* Centrado en móvil */
+      align-items: center;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
+      z-index: 1050;
+    }
+    @media (min-width: 768px) {
+        .floating-save-bar { justify-content: flex-end; padding-right: 3rem; }
+    }
+
+    /* --- HELPERS --- */
+    .text-label-xs { font-size: 0.7rem; text-transform: uppercase; color: #9ca3af; font-weight: 600; margin-bottom: 4px; display: block; }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar navbar-expand-lg navbar-glass mb-4">
+    <div class="container-xl">
+      <a class="navbar-brand fw-bold text-dark" href="#">
+        <i class="fa-solid fa-sliders text-primary me-2"></i>Configuración
+      </a>
+      <div class="ms-auto">
+         <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left me-1"></i> Volver
+         </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-xl">
+    
+    <form method="POST">
+        
+        <div class="card-custom">
+            <div class="card-header-custom">
+                <div class="bg-light text-primary p-2 rounded"><i class="fa-solid fa-gear"></i></div>
+                <h3 class="card-title-custom">Parámetros Globales</h3>
+            </div>
+            <div class="p-4">
+                <div class="row g-4">
+                    <div class="col-md-6 col-lg-4">
+                        <label class="form-label fw-medium text-dark small">Tolerancia Merma (por viaje)</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light text-muted border-end-0"><i class="fa-solid fa-scale-balanced"></i></span>
+                            <input type="number" name="tolerance_kg" value="{{ conf.tolerance_kg }}" step="0.1" class="form-control border-start-0" required>
+                            <span class="input-group-text bg-light text-muted">kg</span>
+                        </div>
+                        <div class="form-text text-xs mt-1"><i class="fa-solid fa-circle-info me-1"></i>Margen permitido antes de aplicar descuentos.</div>
+                    </div>
+                    </div>
+            </div>
+        </div>
+
+        <div class="card-custom">
+            <div class="card-header-custom">
+                <div class="bg-light text-info p-2 rounded"><i class="fa-solid fa-truck-fast"></i></div>
+                <h3 class="card-title-custom">Transportistas</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-config mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">Transportista</th>
+                            <th style="width: 30%;">Contacto / Email</th>
+                            <th style="width: 20%;">Condiciones Pago</th>
+                            <th style="width: 25%;">Tarifa Flete</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in transportistas %}
+                        <tr>
+                            <td>
+                                <div class="fw-medium text-dark">{{ t.username }}</div>
+                            </td>
+                            <td>
+                                <input type="email" class="form-control form-control-sm" name="email_{{ t.id }}" value="{{ t.email or '' }}" placeholder="Sin email registrado">
+                            </td>
+                            <td>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" class="form-control" name="paydays_{{ t.id }}" value="{{ t.payment_days or 30 }}">
+                                    <span class="input-group-text bg-light">días</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text border-end-0 bg-white text-muted">$</span>
+                                    <input type="number" class="form-control border-start-0 ps-1" name="price_{{ t.id }}" value="{{ t.custom_price }}" step="0.01" placeholder="0.00">
+                                    <span class="input-group-text bg-light text-muted">/ Tn</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card-custom">
+            <div class="card-header-custom">
+                <div class="bg-light text-warning p-2 rounded"><i class="fa-solid fa-industry"></i></div>
+                <h3 class="card-title-custom">Areneras</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-config mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 20%;">Planta</th>
+                            <th style="width: 25%;">Email</th>
+                            <th style="width: 15%;">Pago</th>
+                            <th style="width: 20%;">Modo Certificación</th>
+                            <th style="width: 20%;">Costo Arena</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in areneras %}
+                            {% if not a.parent_id %}
+                            <tr>
+                                <td>
+                                    <div class="fw-medium text-dark">{{ a.username }}</div>
+                                </td>
+                                <td>
+                                    <input type="email" class="form-control form-control-sm" name="email_{{ a.id }}" value="{{ a.email or '' }}" placeholder="email@...">
+                                </td>
+                                <td>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" class="form-control" name="paydays_{{ a.id }}" value="{{ a.payment_days or 30 }}">
+                                        <span class="input-group-text bg-light">días</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <select name="certtype_{{ a.id }}" class="form-select form-select-sm">
+                                        <option value="llegada" {{ 'selected' if a.cert_type=='llegada' else '' }}>Llegada (Báscula)</option>
+                                        <option value="salida"  {{ 'selected' if a.cert_type=='salida' else '' }}>Salida (Remito)</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text border-end-0 bg-white text-muted">$</span>
+                                        <input type="number" class="form-control border-start-0 ps-1" name="price_{{ a.id }}" value="{{ a.custom_price }}" step="0.01" placeholder="0.00">
+                                        <span class="input-group-text bg-light text-muted">/ Tn</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="floating-save-bar animate__animated animate__fadeInUp">
+            <div class="me-3 text-muted small d-none d-md-block">
+                <i class="fa-solid fa-circle-info me-1"></i>Revisa los precios antes de guardar.
+            </div>
+            <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">
+                <i class="fa-solid fa-floppy-disk me-2"></i>Guardar Cambios
+            </button>
+        </div>
+
+    </form>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            Swal.fire({
+              toast: true,
+              position: 'top-end',
+              icon: "{{ 'success' if category in ['ok','success'] else 'error' }}",
+              title: "{{ message }}",
+              showConfirmButton: false,
+              timer: 3000,
+              timerProgressBar: true
+            });
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    });
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

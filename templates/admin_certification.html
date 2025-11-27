@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="es" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Certificación | Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --card-radius: 12px;
+    }
+
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: 60px;
+    }
+
+    /* --- NAVBAR --- */
+    .navbar-glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    /* --- TABLA COMPLEJA --- */
+    .card-custom {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      overflow: hidden;
+    }
+
+    .table-cert th {
+      background-color: #f8fafc;
+      color: #64748b;
+      font-weight: 700;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: bottom;
+    }
+    .table-cert td {
+      vertical-align: middle;
+      font-size: 0.85rem;
+      color: #334155;
+      padding: 8px 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    
+    /* Grupos de Columnas */
+    .bg-group-arenera { background-color: #fffbfb; border-left: 2px solid #ffe4e6; }
+    .bg-group-sbe { background-color: #f0f9ff; border-left: 2px solid #bae6fd; }
+    
+    th.bg-group-arenera { background-color: #fff1f2; color: #9f1239; }
+    th.bg-group-sbe { background-color: #e0f2fe; color: #075985; }
+
+    /* Inputs Manuales */
+    .input-manual {
+      font-size: 0.8rem;
+      padding: 4px 8px;
+      height: 28px;
+      border-radius: 4px;
+    }
+
+    /* Badges Estado */
+    .badge-status { font-size: 0.65rem; padding: 4px 8px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .st-pendiente { background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb; }
+    .st-pre-aprobado { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+    .st-observado { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+    .st-certificado { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+
+    /* Tabs Navigation */
+    .nav-pills .nav-link {
+      color: #64748b;
+      font-weight: 500;
+      font-size: 0.9rem;
+      padding: 6px 16px;
+      border-radius: 8px;
+    }
+    .nav-pills .nav-link.active {
+      background-color: var(--bs-primary);
+      color: #fff;
+    }
+    .nav-pills .nav-link:hover:not(.active) {
+      background-color: #e5e7eb;
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar navbar-expand-lg navbar-glass mb-4">
+    <div class="container-xl">
+      <a class="navbar-brand fw-bold text-dark" href="#">
+        <i class="fa-solid fa-check-double text-success me-2"></i>Certificación
+      </a>
+      <div class="ms-auto d-flex gap-2">
+         <a href="{{ url_for('sync_sbe') }}" class="btn btn-sm btn-primary-soft text-primary fw-medium bg-primary-subtle" onclick="showSyncLoading(event)">
+            <i class="fa-solid fa-rotate me-1"></i> Sync SBE
+         </a>
+         <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left me-1"></i> Volver
+         </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid px-4"> <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+        
+        <ul class="nav nav-pills">
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if view_mode!='historial' else '' }}" href="{{ url_for('admin_certificacion', view='pendiente') }}">
+                    <i class="fa-solid fa-hourglass-half me-2"></i>Pendientes
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if view_mode=='historial' else '' }}" href="{{ url_for('admin_certificacion', view='historial') }}">
+                    <i class="fa-solid fa-clock-rotate-left me-2"></i>Historial
+                </a>
+            </li>
+        </ul>
+
+        <form class="d-flex gap-2 flex-wrap" method="GET" action="{{ url_for('admin_certificacion') }}">
+            <input type="hidden" name="view" value="{{ view_mode }}">
+            
+            <select name="transportista_id" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                <option value="all">Todos Transportistas</option>
+                {% for t in transportistas %}
+                    <option value="{{ t.id }}" {{ 'selected' if sel_tid|string == t.id|string else '' }}>{{ t.username }}</option>
+                {% endfor %}
+            </select>
+
+            <select name="arenera_id" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                <option value="all">Todas Areneras</option>
+                {% for a in areneras %}
+                    <option value="{{ a.id }}" {{ 'selected' if sel_aid|string == a.id|string else '' }}>{{ a.username }}</option>
+                {% endfor %}
+            </select>
+
+            {% if sel_tid or sel_aid %}
+                <a href="{{ url_for('admin_certificacion', view=view_mode) }}" class="btn btn-sm btn-link text-danger text-decoration-none">
+                    <i class="fa-solid fa-xmark"></i>
+                </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="card-custom">
+      <div class="table-responsive">
+        <table class="table table-cert mb-0 text-nowrap">
+          <thead>
+            <tr>
+              <th style="width: 100px;">Estado</th>
+              <th>ID / Fechas</th>
+              <th>Transporte</th>
+              <th>Patentes</th>
+              
+              <th class="bg-group-arenera text-center border-bottom-0 pb-0" colspan="2">Datos arenera</th>
+              
+              <th class="bg-group-sbe text-center border-bottom-0 pb-0" colspan="2">
+                  Datos SBE
+                  <i class="fa-solid fa-satellite-dish ms-1 opacity-50"></i>
+              </th>
+              
+              <th class="text-end pe-4">Acción</th>
+            </tr>
+            <tr>
+              <th></th> <th></th> <th></th> <th></th> <th class="bg-group-arenera text-center">Remito</th>
+              <th class="bg-group-arenera text-center">Peso</th>
+              
+              <th class="bg-group-sbe text-center">Remito</th>
+              <th class="bg-group-sbe text-center">Peso</th>
+              
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in shipments %}
+            <tr class="{{ 'bg-warning-subtle' if s.cert_status == 'Observado' else '' }}">
+              
+              <td>
+                <span class="badge-status st-{{ s.cert_status|lower|replace(' ','-') }}">
+                  {{ s.cert_status }}
+                </span>
+                {% if s.observation_reason %}
+                    <div class="text-danger fw-bold" style="font-size:0.65rem; margin-top:4px; line-height:1.1;">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ s.observation_reason }}
+                    </div>
+                {% endif %}
+              </td>
+
+              <td>
+                <div class="fw-bold text-dark">#{{ s.id }}</div>
+                <div class="text-muted small" title="Salida / Llegada">
+                    {{ s.date.strftime('%d/%m') }} 
+                    <i class="fa-solid fa-arrow-right mx-1 text-xs"></i> 
+                    {{ s.sbe_fecha_salida.strftime('%d/%m') if s.sbe_fecha_salida else '?' }}
+                </div>
+              </td>
+
+              <td>
+                <div class="text-dark fw-medium">{{ s.transportista.username }}</div>
+                <div class="text-secondary" style="font-size:0.75rem;">
+                    <i class="fa-regular fa-id-card me-1"></i>{{ s.chofer }}
+                </div>
+              </td>
+
+              <td>
+                <div class="d-flex flex-column">
+                    <span class="text-xs text-muted">Decl: <strong class="text-dark">{{ s.tractor }}</strong></span>
+                    <span class="text-xs text-muted">
+                        SBE: 
+                        {% if s.sbe_patente %}
+                            <strong class="{{ 'text-danger' if s.sbe_patente != s.tractor else 'text-success' }}">
+                                {{ s.sbe_patente }}
+                            </strong>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </span>
+                </div>
+              </td>
+
+              <td class="bg-group-arenera text-center font-monospace">{{ s.remito_arenera or '-' }}</td>
+              <td class="bg-group-arenera text-center font-monospace fw-bold">{{ s.peso_neto_arenera or '-' }}</td>
+
+              <td class="bg-group-sbe p-1" colspan="2">
+                {% if s.cert_status == 'Certificado' %}
+                    <div class="d-flex justify-content-around fw-bold text-primary">
+                        <span>{{ s.final_remito }}</span>
+                        <span>{{ s.final_peso }}</span>
+                    </div>
+                {% else %}
+                    <form action="{{ url_for('corregir_sbe', shipment_id=s.id) }}" method="POST" class="d-flex gap-1 justify-content-center align-items-center">
+                        <input type="text" name="sbe_remito" value="{{ s.sbe_remito or '' }}" class="form-control input-manual text-center" placeholder="Remito" style="width: 80px;">
+                        <input type="text" name="sbe_peso" value="{{ s.sbe_peso_neto or '' }}" class="form-control input-manual text-center" placeholder="Tn" style="width: 60px;">
+                        
+                        <button type="submit" class="btn btn-sm btn-light border text-success p-0 px-1" title="Guardar Manual" style="height:28px;">
+                            <i class="fa-solid fa-check"></i>
+                        </button>
+                        
+                        {% if s.sbe_manual_override %}
+                           <button type="submit" name="action" value="reset" class="btn btn-sm btn-light border text-warning p-0 px-1" title="Resetear a Automático" style="height:28px;">
+                                <i class="fa-solid fa-rotate-left"></i>
+                           </button>
+                        {% endif %}
+                    </form>
+                {% endif %}
+              </td>
+
+              <td class="text-end pe-4">
+                {% if s.cert_status == 'Certificado' %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">
+                        <i class="fa-solid fa-lock me-1"></i>Cerrado
+                    </span>
+                {% elif (s.cert_status in ['Pre-Aprobado', 'Observado'] or s.sbe_manual_override) %}
+                    <form action="{{ url_for('certify_shipment', shipment_id=s.id) }}" method="POST">
+                        <button class="btn btn-primary btn-sm py-1 px-3 shadow-sm" type="submit">
+                            Certificar
+                        </button>
+                    </form>
+                {% else %}
+                    <span class="text-muted text-xs fst-italic">Sin acciones</span>
+                {% endif %}
+              </td>
+
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" class="text-center py-5 text-muted">
+                    <i class="fa-solid fa-filter mb-2 fa-2x opacity-25"></i><br>
+                    No se encontraron registros con los filtros actuales.
+                </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Mensajes Flash
+    document.addEventListener('DOMContentLoaded', () => {
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            Swal.fire({
+              toast: true,
+              position: 'top-end',
+              icon: "{{ 'success' if category in ['ok','success'] else 'info' }}",
+              title: "{{ message }}",
+              showConfirmButton: false,
+              timer: 3000
+            });
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    });
+
+    // Loading Sync
+    function showSyncLoading(e) {
+        e.preventDefault();
+        const url = e.currentTarget.getAttribute('href');
+        Swal.fire({
+          title: 'Sincronizando...',
+          text: 'Consultando servicios de Azure.',
+          didOpen: () => { Swal.showLoading(); window.location.href = url; }
+        });
+    }
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

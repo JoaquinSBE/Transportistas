@@ -1,116 +1,237 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
-  <title>Ingresar · Transportistas</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ingresar | Gestión Logística</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
   <style>
-    :root{
-      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
-      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
-    }
-    *{ box-sizing:border-box }
-    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
-    .wrap{ min-height:100dvh; display:grid; place-items:center; padding:24px; }
-    .card{
-      width:100%; max-width:420px; background:var(--card); border-radius:var(--radius);
-      border:1px solid var(--ring);
-      box-shadow:0 1px 2px rgba(15,23,42,.06), 0 6px 14px rgba(2,6,23,.04);
-      padding:22px 18px;
-    }
-    .brand{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
-    .brand .logo{
-      width:36px; height:36px; border-radius:10px;
-      background:linear-gradient(135deg, var(--brand-2), #7aa7ff);
-      display:grid; place-items:center; color:#fff; font-weight:800;
-      box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);
-    }
-    .brand h1{ font-size:20px; margin:0 }
-    .muted{ color:var(--muted); font-size:13px; margin-bottom:14px }
-
-    label{ font-size:12px; color:var(--muted); display:block; margin:8px 2px 6px }
-    .in{
-      width:100%; min-height:40px; padding:10px 12px; border-radius:10px;
-      border:1px solid var(--ring); background:#fff; color:var(--ink);
-    }
-    .in:focus{ outline:none; border-color:#b5c8ff; box-shadow:0 0 0 3px rgba(37,99,235,.15); }
-
-    .row{ display:flex; gap:10px; align-items:center }
-    .btn{
-      width:100%; min-height:40px; padding:10px 12px; border-radius:10px; cursor:pointer;
-      border:1px solid var(--brand-2); background:var(--brand-2); color:#fff; font-weight:700;
-    }
-    .btn:focus{ outline:none; box-shadow:0 0 0 3px rgba(37,99,235,.2); }
-
-    .pass-wrap{ position:relative }
-    .toggle{
-      position:absolute; right:8px; top:50%; transform:translateY(-50%);
-      border:1px solid var(--ring); background:#fff; color:var(--muted);
-      border-radius:8px; padding:4px 8px; cursor:pointer; font-size:12px;
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
     }
 
-    /* flashes */
-    .flashes{ margin:8px 0 0 0; }
-    .flash{
-      background:#fde8e8; color:#7a1d1d; border:1px solid #f6caca; border-radius:10px;
-      padding:8px 10px; font-size:13px; margin-top:8px;
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    /* footer */
-    .foot{ margin-top:12px; text-align:center; color:var(--muted); font-size:12px }
+    /* --- LOGIN CARD --- */
+    .login-card {
+      width: 100%;
+      max-width: 400px;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+      padding: 2.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    /* Barra superior de color */
+    .login-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 5px;
+      background: linear-gradient(90deg, var(--bs-primary), #60a5fa);
+    }
+
+    .brand-section {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    
+    .logo-icon {
+      width: 56px;
+      height: 56px;
+      background: rgba(37, 99, 235, 0.1);
+      color: var(--bs-primary);
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .login-title { font-weight: 700; color: #111827; margin-bottom: 0.25rem; }
+    .login-subtitle { color: #6b7280; font-size: 0.875rem; }
+
+    /* --- INPUTS --- */
+    .form-label { font-size: 0.85rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem; }
+    
+    .input-group-text {
+      background-color: #f9fafb;
+      border-color: #d1d5db;
+      color: #9ca3af;
+      border-right: none;
+    }
+    
+    .form-control {
+      border-color: #d1d5db;
+      border-left: none;
+      font-size: 0.95rem;
+      padding: 0.7rem 0.75rem;
+      box-shadow: none;
+    }
+    
+    .form-control:focus {
+      border-color: var(--bs-primary);
+      box-shadow: none; /* Quitamos el glow default para personalizar el borde del grupo */
+    }
+
+    /* Efecto Focus en el Grupo */
+    .input-group:focus-within .input-group-text,
+    .input-group:focus-within .form-control,
+    .input-group:focus-within .btn-toggle {
+       border-color: var(--bs-primary);
+       box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    /* Botón Ver Clave */
+    .btn-toggle {
+      background-color: #fff;
+      border: 1px solid #d1d5db;
+      border-left: none;
+      color: #9ca3af;
+      z-index: 5;
+    }
+    .btn-toggle:hover { background-color: #f9fafb; color: #4b5563; }
+
+    /* Botón Ingresar */
+    .btn-login {
+      padding: 0.75rem;
+      font-weight: 600;
+      font-size: 1rem;
+      background-color: var(--bs-primary);
+      border: none;
+      box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+      transition: transform 0.1s;
+    }
+    .btn-login:hover {
+      background-color: #1d4ed8;
+      transform: translateY(-1px);
+    }
+    .btn-login:active { transform: translateY(0); }
+
+    .footer-text {
+      text-align: center;
+      margin-top: 2rem;
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <div class="brand">
-        <div class="logo">SB</div>
-        <h1>Logistica</h1>
+
+  <div class="login-card animate__animated animate__fadeInUp">
+    
+    <div class="brand-section">
+      <div class="logo-icon">
+        <i class="fa-solid fa-truck-fast"></i>
+      </div>
+      <h1 class="h4 login-title">Bienvenido</h1>
+      <p class="login-subtitle">Ingresa tus credenciales para continuar</p>
+    </div>
+
+    <form method="post" action="{{ url_for('login') }}">
+      
+      <div class="mb-3">
+        <label for="usuario" class="form-label">Usuario</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fa-regular fa-user"></i></span>
+          <input type="text" class="form-control" id="usuario" name="usuario" placeholder="Ej: juan.perez" autofocus required>
+        </div>
       </div>
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flashes">
-          {% for category, message in messages %}
-            <div class="flash">{{ message }}</div>
-          {% endfor %}
+      <div class="mb-4">
+        <label for="clave" class="form-label">Contraseña</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
+          <input type="password" class="form-control" id="clave" name="clave" placeholder="••••••••" required>
+          <button class="btn btn-toggle" type="button" onclick="togglePass()">
+            <i class="fa-regular fa-eye" id="eye-icon"></i>
+          </button>
         </div>
-      {% endif %}
-      {% endwith %}
+      </div>
 
-      <form method="post" action="{{ url_for('login') }}" style="margin-top:6px;">
-        <label for="usuario">Usuario</label>
-        <input class="in" id="usuario" name="usuario" type="text" placeholder="tu.usuario" autofocus required>
+      <div class="d-grid">
+        <button class="btn btn-primary btn-login" type="submit">
+          Iniciar Sesión
+        </button>
+      </div>
 
-        <label for="clave">Contraseña</label>
-        <div class="pass-wrap">
-          <input class="in" id="clave" name="clave" type="password" placeholder="********" required>
-          <button class="toggle" type="button" onclick="togglePass()">Ver</button>
-        </div>
+    </form>
 
-        <div style="margin-top:14px;">
-          <button class="btn" type="submit">Ingresar</button>
-        </div>
-      </form>
-
-      <div class="foot">© San Benito Energía</div>
+    <div class="footer-text">
+      © San Benito Energía
     </div>
+
   </div>
 
   <script>
-    function togglePass(){
+    // 1. Toggle Password
+    function togglePass() {
       const input = document.getElementById('clave');
-      const btn = document.querySelector('.toggle');
-      const isPass = input.type === 'password';
-      input.type = isPass ? 'text' : 'password';
-      btn.textContent = isPass ? 'Ocultar' : 'Ver';
+      const icon = document.getElementById('eye-icon');
+      
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+      } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+      }
       input.focus();
     }
-    // Enter en usuario va a clave:
-    document.getElementById('usuario').addEventListener('keydown', e=>{
-      if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('clave').focus(); }
+
+    // 2. SweetAlert para Errores (Flash Messages)
+    document.addEventListener('DOMContentLoaded', () => {
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            // Detectamos si es error para mostrar icono rojo
+            const isError = "{{ 'error' if category in ['error','danger'] else 'success' }}" === 'error';
+            
+            Swal.fire({
+              title: isError ? 'Error de Acceso' : 'Información',
+              text: "{{ message }}",
+              icon: isError ? 'error' : 'info',
+              confirmButtonColor: '#2563eb',
+              confirmButtonText: 'Intentar de nuevo'
+            });
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      
+      // 3. Enter en usuario salta a clave
+      const userInput = document.getElementById('usuario');
+      userInput.addEventListener('keydown', (e) => {
+        if(e.key === 'Enter') {
+          e.preventDefault();
+          document.getElementById('clave').focus();
+        }
+      });
     });
   </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

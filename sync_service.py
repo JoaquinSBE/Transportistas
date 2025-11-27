@@ -1,5 +1,3 @@
-# sync_service.py
-
 import os
 import io
 import re
@@ -8,194 +6,249 @@ import requests
 import msal
 import pandas as pd
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from sqlalchemy import text
 from flask import current_app
 
 # --- FUNCIONES HELPER ---
 
 def normalize_remito(remito_raw):
-    """Normaliza el remito separando por '-' y quitando ceros a la izquierda."""
     if not remito_raw: return ""
     try:
-        parts = str(remito_raw).split('-')
-        # Tomamos la última parte y quitamos ceros a la izquierda
-        return parts[-1].lstrip('0')
+        s = str(remito_raw).strip()
+        if '-' in s:
+            parts = s.split('-')
+            number_part = parts[-1]
+        else:
+            number_part = s
+        return number_part.lstrip('0')
     except Exception:
         return ""
 
+def clean_patente(p):
+    if not p: return ""
+    return re.sub(r'[^A-Z0-9]', '', str(p).upper())
+
+def normalize_text(t):
+    """Limpia texto genérico (Origen) para agrupar mejor"""
+    if not t: return ""
+    return str(t).strip().upper()
+
 def get_graph_token():
-    """Obtiene token de acceso para Microsoft Graph"""
     tenant_id = os.getenv("GRAPH_TENANT_ID")
     client_id = os.getenv("GRAPH_CLIENT_ID")
     secret    = os.getenv("GRAPH_CLIENT_SECRET")
-    
-    if not (tenant_id and client_id and secret):
-        return None
-        
+    if not (tenant_id and client_id and secret): return None
     authority = f"https://login.microsoftonline.com/{tenant_id}"
-    app_msal = msal.ConfidentialClientApplication(
-        client_id, authority=authority, client_credential=secret
-    )
+    app_msal = msal.ConfidentialClientApplication(client_id, authority=authority, client_credential=secret)
     result = app_msal.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
     return result.get("access_token")
 
 def download_sharepoint_excel(share_url, token):
-    """Descarga Excel desde Link de Sharepoint usando Graph API"""
     base64_value = base64.urlsafe_b64encode(share_url.encode("utf-8")).decode("utf-8")
     encoded_url = "u!" + base64_value.rstrip("=")
-    
     endpoint = f"https://graph.microsoft.com/v1.0/shares/{encoded_url}/driveItem/content"
     headers = {"Authorization": f"Bearer {token}"}
-    
     resp = requests.get(endpoint, headers=headers)
-    if resp.status_code == 200:
-        return io.BytesIO(resp.content)
+    if resp.status_code == 200: return io.BytesIO(resp.content)
     return None
 
-def clean_patente(p):
-    """Normaliza patente: quita espacios, guiones y pone mayúsculas"""
-    if not p: return ""
-    return re.sub(r'[^A-Z0-9]', '', str(p).upper())
-
-
-# --- FUNCIÓN PRINCIPAL DE SINCRONIZACIÓN ---
+# --- FUNCIÓN PRINCIPAL ---
 
 def run_sbe_sync(db, Shipment):
-    """Función principal que ejecuta la sincronización y el cruce."""
-    token = get_graph_token()
-    if not token:
-        return (0, "Error de configuración Azure (Faltan credenciales .env).")
+    print("--- 🔍 INICIO SYNC SBE (AGRUPACIÓN ESTRICTA) ---")
+    
+    try:
+        res = db.session.execute(text("SELECT tolerance_kg FROM system_config LIMIT 1")).fetchone()
+        tolerance_kg = float(res[0]) if res else 700.0
+    except Exception:
+        tolerance_kg = 700.0
 
-    # 1. Descargar y unificar Excels
+    token = get_graph_token()
+    if not token: return (0, "Error credenciales Azure.")
+
     links = [os.getenv("SHAREPOINT_LINK_1"), os.getenv("SHAREPOINT_LINK_2")]
     dfs = []
-    
-    for link in links:
+
+    for i, link in enumerate(links):
         if link:
-            file_content = download_sharepoint_excel(link, token)
-            if file_content:
+            content = download_sharepoint_excel(link, token)
+            if content:
                 try:
-                    # USAMOS sheet_name="Reporte" como se confirmó
-                    df = pd.read_excel(file_content, sheet_name="Reporte") 
+                    df = pd.read_excel(content, sheet_name="Reporte")
                     dfs.append(df)
                 except Exception as e:
-                    current_app.logger.error(f"Error leyendo Excel SBE: {e}")
-                    return (0, f"Error leyendo el archivo. Asegúrate que la hoja se llama 'Reporte'. Detalle: {e}") 
+                    print(f"Error leyendo Excel {i}: {e}")
 
-    if not dfs:
-        return (0, "No se pudieron descargar los archivos de SBE.")
+    if not dfs: return (0, "No se descargaron archivos.")
 
-    full_data = pd.concat(dfs, ignore_index=True)
-    full_data.columns = [c.strip() for c in full_data.columns]
-    full_data = full_data.dropna(subset=['Factura']) 
+    raw_df = pd.concat(dfs, ignore_index=True)
+    raw_df.columns = [c.strip() for c in raw_df.columns]
+    
+    # -------------------------------------------------------
+    # NUEVA LÓGICA DE AGRUPACIÓN SEGURA
+    # -------------------------------------------------------
+    
+    # A. Filtro básico
+    if 'Estado' in raw_df.columns:
+        raw_df = raw_df[raw_df['Estado'].astype(str).str.strip().str.lower() == 'ingreso'].copy()
+    
+    raw_df = raw_df.dropna(subset=['Factura'])
+    
+    # B. Normalización para CLAVES DE AGRUPACIÓN
+    # Creamos columnas temporales normalizadas para usarlas de llave única
+    raw_df['Key_Remito']  = raw_df['Factura'].apply(normalize_remito)
+    raw_df['Key_Fecha']   = pd.to_datetime(raw_df['Fecha Salida'], errors='coerce').dt.date
+    
+    # Normalizamos Patentes y Origen para evitar que un espacio o mayúscula impida la suma
+    raw_df['Key_Patente'] = raw_df['Patente Tractor'].apply(clean_patente)
+    # Si existe patente camión, la usamos, si no, usamos vacío para no romper el group
+    if 'Patente Camión' in raw_df.columns:
+        raw_df['Key_Acoplado'] = raw_df['Patente Camión'].apply(clean_patente)
+    else:
+        raw_df['Key_Acoplado'] = ""
+        
+    raw_df['Key_Origen'] = raw_df['Origen'].apply(normalize_text)
+    
+    # Asegurar peso numérico
+    raw_df['Peso Neto'] = pd.to_numeric(raw_df['Peso Neto'], errors='coerce').fillna(0)
 
-    # Normalización de SBE para CRUCE
-    full_data['Remito_Normalized'] = full_data['Factura'].apply(normalize_remito)
-    full_data['Patente_Tractor_Clean'] = full_data['Patente Tractor'].apply(clean_patente)
-    full_data['Patente_Camion_Clean'] = full_data['Patente Camión'].apply(clean_patente) # Nuevo campo de limpieza
+    # C. AGRUPAR: (Remito + Fecha + Patente + Acoplado + Origen) -> Sumar Peso
+    # Esto es la seguridad máxima.
+    agg_rules = {
+        'Peso Neto': 'sum',
+        # Para el resto, nos quedamos con el dato de la primera fila del grupo
+        'Factura': 'first',          
+        'Patente Tractor': 'first',
+        'Patente Camión': 'first',
+        'Fecha Salida': 'first',     
+        'Fecha Entrada': 'first'
+    }
+    
+    # Filtramos reglas por si alguna columna no existe en el Excel
+    actual_agg = {k: v for k, v in agg_rules.items() if k in raw_df.columns}
+    
+    # Claves de agrupación
+    group_keys = ['Key_Remito', 'Key_Fecha', 'Key_Patente', 'Key_Acoplado', 'Key_Origen']
+    
+    full_data_clean = raw_df.groupby(group_keys, as_index=False).agg(actual_agg)
 
-    # 2. Buscar viajes PENDIENTES
+    # D. Columnas limpias para el cruce final con la DB
+    full_data_clean['Patente_Clean'] = full_data_clean['Key_Patente']
+    full_data_clean['Patente_Camion_Clean'] = full_data_clean['Key_Acoplado']
+    # (El remito ya está en Key_Remito, pero lo renombramos para compatibilidad con el código de abajo)
+    full_data_clean['Remito_Norm'] = full_data_clean['Key_Remito']
+    full_data_clean['Fecha_Solo'] = full_data_clean['Key_Fecha']
+
+    print(f"📊 Filas procesadas (Agrupación Segura): {len(full_data_clean)}")
+
+    # -------------------------------------------------------
+    # LÓGICA DE CRUCE (Idéntica a la anterior, usando la tabla agrupada)
+    # -------------------------------------------------------
+
     pendientes = db.session.query(Shipment).filter(
         Shipment.cert_status != 'Certificado',
-        Shipment.status.in_(['En viaje', 'Llego'])
+        Shipment.status.in_(['En viaje', 'Salió', 'Llego'])
     ).all()
 
-    matches_count = 0
-    
+    matches = 0
+
     for ship in pendientes:
-        # Normalización de datos LOCALES para CRUCE
-        ship_remito = normalize_remito(ship.remito_arenera) # Remito local normalizado
-        ship_tractor = clean_patente(ship.tractor)
-        ship_trailer = clean_patente(ship.trailer)
+        if ship.sbe_manual_override:
+            continue
+
+        ship_remito = normalize_remito(ship.remito_arenera)
+        ship_trac = clean_patente(ship.tractor)
+        ship_trail = clean_patente(ship.trailer)
+        ship_date = ship.date
         
         match_row = None
         match_type = ""
+        reasons = [] 
 
-        # --- LÓGICA DE CRUCE DE 3 NIVELES ---
+        # Filtro fecha
+        valid_sbe = full_data_clean[full_data_clean['Fecha_Solo'] >= ship_date]
+        if valid_sbe.empty: continue 
 
-        # 1. INTENTO 1: REMITO + PATENTE (Cruzada)
+        # 1. Match Total
         if ship_remito:
-            
-            # Condición de Remito: Que el remito normalizado SBE coincida con el remito normalizado local
-            remito_match_cond = (full_data['Remito_Normalized'] == ship_remito)
-            
-            # Condición de Patente: Que la patente local (Tractor o Trailer) coincida con la Patente SBE (Tractor o Camión)
-            # Esto maneja errores de registro (Tractor en campo Camion, etc.)
-            plate_match_cond = (
-                (full_data['Patente_Tractor_Clean'] == ship_tractor) | # SBE TRACTOR == LOCAL TRACTOR
-                (full_data['Patente_Camion_Clean'] == ship_trailer) |  # SBE CAMION == LOCAL TRAILER
-                (full_data['Patente_Tractor_Clean'] == ship_trailer) | # SBE TRACTOR == LOCAL TRAILER (Swapped)
-                (full_data['Patente_Camion_Clean'] == ship_tractor)    # SBE CAMION == LOCAL TRACTOR (Swapped)
+            rem_cond = (valid_sbe['Remito_Norm'] == ship_remito)
+            pat_cond = (
+                (valid_sbe['Patente_Clean'] == ship_trac) |
+                (valid_sbe['Patente_Camion_Clean'] == ship_trail) |
+                (valid_sbe['Patente_Clean'] == ship_trail) |
+                (valid_sbe['Patente_Camion_Clean'] == ship_trac)
             )
-
-            found = full_data[remito_match_cond & plate_match_cond]
+            found = valid_sbe[rem_cond & pat_cond]
             
-            if not found.empty:
-                match_row = found.iloc[0]
-                match_type = "Total (Remito + Patente Cruzada)"
+            if not found.empty: 
+                found = found.sort_values('Fecha_Solo')
+                match_row = found.iloc[0]; match_type = "Total"
 
-        # 2. INTENTO 2: SOLO REMITO (Si falló el 1)
+        # 2. Solo Remito
         if match_row is None and ship_remito:
-            found = full_data[full_data['Remito_Normalized'] == ship_remito]
-            if not found.empty:
-                match_row = found.iloc[0]
-                match_type = "Por Remito (Fallo Patente)"
+            found = valid_sbe[valid_sbe['Remito_Norm'] == ship_remito]
+            if not found.empty: 
+                found = found.sort_values('Fecha_Solo')
+                match_row = found.iloc[0]; match_type = "Remito"
 
-        # 3. INTENTO 3: SOLO PATENTE + VENTANA DE 7 DÍAS (Si falló 1 y 2)
-        if match_row is None and (ship_tractor or ship_trailer):
-            # Filtramos si la patente LOCAL (tractor o trailer) coincide con CUALQUIER patente SBE
-            patente_search_cond = (full_data['Patente_Tractor_Clean'] == ship_tractor) | \
-                                  (full_data['Patente_Camion_Clean'] == ship_tractor) | \
-                                  (full_data['Patente_Tractor_Clean'] == ship_trailer) | \
-                                  (full_data['Patente_Camion_Clean'] == ship_trailer)
-            
-            found = full_data[patente_search_cond]
-            
+        # 3. Solo Patente
+        if match_row is None and (ship_trac or ship_trail):
+            pat_cond = (valid_sbe['Patente_Clean'] == ship_trac) | \
+                       (valid_sbe['Patente_Camion_Clean'] == ship_trac) | \
+                       (valid_sbe['Patente_Clean'] == ship_trail) | \
+                       (valid_sbe['Patente_Camion_Clean'] == ship_trail)
+            found = valid_sbe[pat_cond]
             if not found.empty:
-                # Buscamos coincidencias dentro de la ventana de 7 días
                 for _, row in found.iterrows():
-                    sbe_date_raw = row['Fecha Salida']
-                    sbe_date_obj = pd.to_datetime(sbe_date_raw).date() if pd.notna(sbe_date_raw) else None
+                    sbe_d = row['Fecha_Solo']
+                    if sbe_d and (sbe_d - ship_date).days <= 7:
+                        match_row = row; match_type = "Patente"; break
 
-                    if sbe_date_obj:
-                        time_diff = sbe_date_obj - ship.date 
-                        
-                        if time_diff.days >= 0 and time_diff.days <= 7:
-                            match_row = row
-                            match_type = "Por Patente + Fecha (Fallo Remito)"
-                            break
-
-        # --- GUARDAR RESULTADOS EN LA BASE ---
+        # Actualización DB
         if match_row is not None:
-            matches_count += 1
+            matches += 1
             
-            # Guardar Remito SBE (Guardamos el formato original SBE para referencia)
             ship.sbe_remito = str(match_row.get('Factura', ''))
             
-            # Guardar Peso SBE (Convertimos a TN)
-            peso_raw = float(match_row.get('Peso Neto', 0) or 0)
-            ship.sbe_peso_neto = peso_raw / 1000.0 if peso_raw > 100 else peso_raw
-
-            # Guardar Fechas
-            fecha_salida_raw = match_row.get('Fecha Salida')
-            if pd.notna(fecha_salida_raw):
-                ship.sbe_fecha_salida = pd.to_datetime(fecha_salida_raw)
+            p_sbe_t = clean_patente(match_row.get('Patente Tractor',''))
+            p_sbe_c = clean_patente(match_row.get('Patente Camión',''))
             
-            # EVALUAR ESTADO AUTOMÁTICO
-            peso_arenera = ship.peso_neto_arenera or 0
-            peso_sbe     = ship.sbe_peso_neto or 0
-            
-            diff_pct = 0
-            if peso_sbe > 0:
-                diff_pct = abs(peso_arenera - peso_sbe) / peso_sbe * 100
-            
-            if diff_pct > 5:
-                ship.cert_status = "Observado"
-            elif match_type.startswith("Total"):
-                 ship.cert_status = "Pre-Aprobado" 
+            if p_sbe_t == ship_trac or p_sbe_t == ship_trail:
+                ship.sbe_patente = match_row.get('Patente Tractor','')
+            elif p_sbe_c == ship_trac or p_sbe_c == ship_trail:
+                ship.sbe_patente = match_row.get('Patente Camión','')
             else:
-                 # Si solo cruzó por remito o patente/fecha: requiere revisión manual.
-                 ship.cert_status = "Observado" 
+                ship.sbe_patente = match_row.get('Patente Tractor','')
+
+            w_raw = float(match_row.get('Peso Neto', 0) or 0)
+            ship.sbe_peso_neto = w_raw / 1000.0 if w_raw > 100 else w_raw
+            
+            fs = match_row.get('Fecha Salida')
+            if pd.notna(fs): 
+                sbe_date = pd.to_datetime(fs)
+                ship.sbe_fecha_salida = sbe_date
+                if sbe_date.date() < (ship.date - timedelta(days=1)):
+                    reasons.append("Fecha SBE anterior")
+            
+            fl = match_row.get('Fecha Entrada')
+            if pd.notna(fl): ship.sbe_fecha_llegada = pd.to_datetime(fl)
+
+            if "Remito" in match_type: reasons.append("Revisar Patente")
+            elif "Patente" in match_type: reasons.append("Revisar Remito")
+            
+            w_local = ship.peso_neto_arenera or 0
+            w_sbe   = ship.sbe_peso_neto or 0
+            if w_sbe > 0:
+                diff_kg = abs(w_local - w_sbe) * 1000
+                if diff_kg > tolerance_kg:
+                    reasons.append(f"Dif. Peso ({int(diff_kg)}kg)")
+
+            if reasons:
+                ship.cert_status = "Observado"
+                ship.observation_reason = ", ".join(reasons)
+            else:
+                ship.cert_status = "Pre-Aprobado"
+                ship.observation_reason = None
 
     db.session.commit()
-    return (matches_count, None)
+    return (matches, None)

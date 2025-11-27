@@ -1,187 +1,264 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
-  <title>Todos los camiones · Admin</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Listado Global | Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
   <style>
-    :root{
-      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
-      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
-      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --card-radius: 12px;
     }
-    *{ box-sizing:border-box }
-    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
-    a{ color:var(--brand-2); text-decoration:none } a:hover{ text-decoration:underline }
-    .wrap{ max-width:1200px; margin:28px auto; padding:0 16px; }
 
-    .header{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
-    .header h1{ margin:0; font-size:26px }
-    .actions{ display:flex; gap:8px; flex-wrap:wrap }
-    .btn{
-      min-height:36px; padding:8px 14px; border-radius:10px; cursor:pointer;
-      border:1px solid var(--brand-2); background:var(--brand-2); color:#fff; font-weight:600; text-decoration:none;
-      display:inline-flex; align-items:center; gap:6px;
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: 60px;
     }
-    .btn.outline{ background:#fff; color:var(--brand-2); }
-    .btn.ghost{ background:#fff; border-color:var(--ring); color:var(--ink); }
 
-    .card{
-      background:var(--card); border-radius:var(--radius);
-      box-shadow:0 1px 2px rgba(15,23,42,.06), 0 6px 14px rgba(2,6,23,.04);
-      border:1px solid var(--ring); display:flex; flex-direction:column; min-width:0;
+    /* --- NAVBAR --- */
+    .navbar-glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
     }
-    .card-h{ padding:14px 16px; border-bottom:1px solid var(--ring); display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
-    .card-h h3{ margin:0; font-size:18px }
-    .card-b{ padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
 
-    /* Filtros */
-    .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
-    label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px }
-    .in{ min-height:36px; padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--ink); width:100%; }
-    .in:focus{ outline:none; border-color:#b5c8ff; box-shadow:0 0 0 3px rgba(37,99,235,.15); }
-    .counter{ color:var(--muted); font-size:13px }
+    /* --- CARD --- */
+    .card-custom {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--card-radius);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      margin-bottom: 1.5rem;
+    }
+    
+    .card-header-custom {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
 
-    /* Tabla */
-    .table-wrap{ overflow:auto; -webkit-overflow-scrolling:touch; }
-    table{ width:100%; border-collapse:separate; border-spacing:0; }
-    th, td{ padding:10px 8px; border-bottom:1px solid var(--ring); font-size:14px; white-space:nowrap; text-align:left; }
-    th{ color:var(--muted); background:#fafbff; position:sticky; top:0; z-index:1; }
-    tbody tr:nth-child(odd){ background:#fbfcff; }
-    td.center, th.center{ text-align:center; }
+    /* --- TABLA --- */
+    .table-custom th {
+      background-color: #f8fafc;
+      color: #64748b;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      white-space: nowrap;
+    }
+    .table-custom td {
+      padding: 10px 16px;
+      vertical-align: middle;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.9rem;
+      color: #334155;
+      white-space: nowrap;
+    }
+    .table-custom tbody tr:hover td {
+      background-color: #f9fafb;
+    }
 
-    /* Pills de estado */
-    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .pill.ok{ background:#e9f9f2; color:#0d7a5a; border:1px solid #cfeee1; }
-    .pill.warn{ background:#fff3d6; color:#8a5a07; border:1px solid #ffe7a3; }
-    .pill.bad{ background:#ffe4e4; color:#8a1a1a; border:1px solid #f7c2c2; }
+    /* --- BADGES --- */
+    .badge-status {
+      font-size: 0.7rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .bg-status-viaje { background-color: #fff7ed; color: #9a3412; border: 1px solid #ffedd5; }
+    .bg-status-llego { background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    
+    /* --- FORMULARIO --- */
+    .form-label-sm { font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.25rem; }
+    .form-control-sm, .form-select-sm { font-size: 0.85rem; border-radius: 6px; }
+    
+    /* Input búsqueda rápida */
+    .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #9ca3af; }
+    .search-input { padding-left: 32px; }
+
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="header">
-      <h1>Todos los camiones</h1>
-      <div class="actions">
-        <a class="btn outline" href="{{ url_for('admin_panel') }}">Volver al panel</a>
+
+  <nav class="navbar navbar-expand-lg navbar-glass mb-4">
+    <div class="container-xl">
+      <a class="navbar-brand fw-bold text-dark" href="#">
+        <i class="fa-solid fa-list-check text-primary me-2"></i>Todos los Camiones
+      </a>
+      <div class="ms-auto">
+         <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left me-1"></i> Volver
+         </a>
       </div>
     </div>
+  </nav>
 
-    <!-- Filtros -->
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-h">
-        <h3>Filtros</h3>
-        <div class="counter">
-          Registros: {{ shipments|length }}
+  <div class="container-xl">
+    
+    <div class="card-custom p-4">
+      <form method="get" action="{{ url_for('todos_camiones') }}">
+        <div class="row g-3 align-items-end">
+          
+          <div class="col-md-2">
+             <label class="form-label-sm">Desde</label>
+             <input type="date" name="from" class="form-control form-control-sm" value="{{ dfrom or '' }}">
+          </div>
+          <div class="col-md-2">
+             <label class="form-label-sm">Hasta</label>
+             <input type="date" name="to" class="form-control form-control-sm" value="{{ dto or '' }}">
+          </div>
+
+          <div class="col-md-2">
+             <label class="form-label-sm">Estado</label>
+             <select name="status" class="form-select form-select-sm">
+                <option value="" {{ '' == (status or '') and 'selected' or '' }}>Todos</option>
+                <option value="En viaje" {{ (status or '') == 'En viaje' and 'selected' or '' }}>En Viaje</option>
+                <option value="Llego" {{ (status or '') == 'Llego' and 'selected' or '' }}>Llegó</option>
+             </select>
+          </div>
+
+          <div class="col-md-2">
+             <label class="form-label-sm">Transportista</label>
+             <input type="text" name="transportista" class="form-control form-control-sm" placeholder="Nombre..." value="{{ transportista or '' }}">
+          </div>
+          <div class="col-md-2">
+             <label class="form-label-sm">Arenera</label>
+             <input type="text" name="arenera" class="form-control form-control-sm" placeholder="Nombre..." value="{{ arenera or '' }}">
+          </div>
+
+          <div class="col-md-2 d-flex gap-2">
+             <button type="submit" class="btn btn-primary btn-sm w-100 fw-medium">Filtrar</button>
+             <a href="{{ url_for('todos_camiones') }}" class="btn btn-light border btn-sm" title="Limpiar"><i class="fa-solid fa-xmark"></i></a>
+          </div>
         </div>
-      </div>
-      <div class="card-b">
-        <form method="get" action="{{ url_for('todos_camiones') }}" class="toolbar">
-          <div>
-            <label>Estado</label>
-            <select name="status" class="in">
-              <option value="" {{ '' == (status or '') and 'selected' or '' }}>Todos</option>
-              <option value="En viaje"  {{ (status or '') == 'En viaje'  and 'selected' or '' }}>En viaje</option>
-              <option value="Llego"     {{ (status or '') == 'Llego'     and 'selected' or '' }}>Llegó</option>
-            </select>
-          </div>
-          <div>
-            <label>Transportista</label>
-            <input class="in" type="text" name="transportista" placeholder="usuario…" value="{{ transportista or '' }}">
-          </div>
-          <div>
-            <label>Arenera</label>
-            <input class="in" type="text" name="arenera" placeholder="usuario…" value="{{ arenera or '' }}">
-          </div>
-          <button class="btn" type="submit">Aplicar</button>
-          <a class="btn ghost" href="{{ url_for('todos_camiones') }}">Limpiar</a>
-
-          <!-- Búsqueda rápida local (no recarga) -->
-          <div style="margin-left:auto; min-width:220px;">
-            <label>Búsqueda rápida</label>
-            <input id="q" class="in" type="text" placeholder="Chofer / DNI / Patente">
-          </div>
-          <div>
-            <label>Desde</label>
-            <input class="in" type="date" name="from" value="{{ dfrom or '' }}">
-          </div>
-          <div>
-            <label>Hasta</label>
-            <input class="in" type="date" name="to" value="{{ dto or '' }}">
-          </div>
-
-        </form>
-      </div>
+      </form>
     </div>
 
-    <!-- Tabla -->
-    <div class="card">
-      <div class="card-h"><h3>Listado</h3></div>
-      <div class="card-b">
-        <div class="table-wrap">
-          <table id="tabla">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Transportista</th>
-                <th>Arenera</th>
-                <th>Chofer</th>
-                <th>DNI</th>
-                <th>Tractor</th>
-                <th>Trailer</th>
-                <th>Tipo</th>
-                <th class="center">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for s in shipments %}
-              <tr>
-                <td>{{ s.date.strftime('%d/%m/%Y') }}</td>
-                <td>{{ s.transportista.username }}</td>
-                <td>{{ s.arenera.username }}</td>
-                <td data-field="find">{{ s.chofer }}</td>
-                <td data-field="find">{{ s.dni }}</td>
-                <td data-field="find">{{ s.tractor }}</td>
-                <td data-field="find">{{ s.trailer }}</td>
-                <td>{{ s.tipo }}</td>
-                <td class="center">
-                  {% if s.status == 'Llego' %}
-                    <span class="pill ok">Llegó</span>
-                  {% elif s.status == 'En viaje' %}
-                    <span class="pill warn">En viaje</span>
-                  {% else %}
-                    <span class="pill warn"></span>
-                  {% endif %}
+    <div class="card-custom">
+      <div class="card-header-custom bg-white">
+         <div class="d-flex align-items-center gap-3">
+             <h3 class="h6 fw-bold m-0 text-uppercase text-secondary">Resultados</h3>
+             <span class="badge bg-secondary-subtle text-secondary border rounded-pill">{{ shipments|length }}</span>
+         </div>
+         
+         <div class="position-relative" style="width: 250px;">
+            <i class="fa-solid fa-magnifying-glass search-icon small"></i>
+            <input type="text" id="q" class="form-control form-control-sm search-input" placeholder="Buscar rápido en tabla...">
+         </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-custom mb-0" id="tabla">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Transportista</th>
+              <th>Arenera</th>
+              <th>Chofer / DNI</th>
+              <th>Equipo (Tractor/Batea)</th>
+              <th>Tipo Carga</th>
+              <th class="text-center">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in shipments %}
+            <tr>
+              <td class="fw-medium text-dark">{{ s.date.strftime('%d/%m/%Y') }}</td>
+              
+              <td>{{ s.transportista.username }}</td>
+              <td>{{ s.arenera.username }}</td>
+              
+              <td data-field="find">
+                 <div class="fw-medium text-dark">{{ s.chofer }}</div>
+                 <div class="text-muted small" style="font-size:0.75rem;">DNI: {{ s.dni }}</div>
+              </td>
+              
+              <td data-field="find">
+                 <div class="font-monospace small">{{ s.tractor }}</div>
+                 <div class="font-monospace small text-muted">{{ s.trailer }}</div>
+              </td>
+              
+              <td><span class="badge bg-light text-dark border fw-normal">{{ s.tipo }}</span></td>
+              
+              <td class="text-center">
+                {% if s.status == 'Llego' %}
+                  <span class="badge-status bg-status-llego"><i class="fa-solid fa-check me-1"></i>Llegó</span>
+                {% elif s.status == 'En viaje' %}
+                  <span class="badge-status bg-status-viaje"><i class="fa-solid fa-truck-fast me-1"></i>En Viaje</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ s.status }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="text-center py-5 text-muted">
+                    <i class="fa-regular fa-folder-open fa-2x mb-3 opacity-25"></i><br>
+                    No hay viajes que coincidan con los filtros.
                 </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
 
   </div>
 
-  <!-- Filtro rápido en vivo por chofer/DNI/patentes -->
   <script>
-    (function(){
+    document.addEventListener('DOMContentLoaded', () => {
       const q = document.getElementById('q');
       const tbody = document.querySelector('#tabla tbody');
-      if(!q || !tbody) return;
-
-      q.addEventListener('input', () => {
-        const needle = q.value.trim().toLowerCase();
-        for (const tr of tbody.rows) {
-          if (!needle) { tr.style.display = ''; continue; }
-          let hay = false;
-          for (const td of tr.querySelectorAll('td[data-field="find"]')) {
-            if ((td.textContent || '').toLowerCase().includes(needle)) { hay = true; break; }
-          }
-          tr.style.display = hay ? '' : 'none';
-        }
-      });
-    })();
+      
+      if(q && tbody) {
+        q.addEventListener('input', () => {
+          const needle = q.value.trim().toLowerCase();
+          const rows = tbody.querySelectorAll('tr');
+          
+          rows.forEach(tr => {
+            // Si no hay búsqueda, mostrar todo
+            if (!needle) { tr.style.display = ''; return; }
+            
+            // Buscar en celdas marcadas o en todo el texto
+            const searchableCells = tr.querySelectorAll('td[data-field="find"]');
+            let found = false;
+            
+            if(searchableCells.length > 0) {
+                searchableCells.forEach(td => {
+                    if(td.textContent.toLowerCase().includes(needle)) found = true;
+                });
+            } else {
+                // Fallback buscar en toda la fila
+                if(tr.textContent.toLowerCase().includes(needle)) found = true;
+            }
+            
+            tr.style.display = found ? '' : 'none';
+          });
+        });
+      }
+    });
   </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

@@ -1,261 +1,296 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
-  <title>Panel del transportista</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Inicio | Transportista</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
   <style>
-    :root{
-      --bg:#f5f7fb; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
-      --brand:#1e40af; --brand-2:#2563eb; --ring:#e5e7eb; --radius:16px;
-      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
-    }
-    *{ box-sizing:border-box }
-    html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;
-      -webkit-text-size-adjust:100%;
-    }
-    .wrap{ max-width:760px; margin:0 auto; padding:16px 12px 80px; } /* espacio para navbar */
-
-    /* header */
-    .top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-    .hello{ display:flex; flex-direction:column; }
-    .hello h1{ margin:0; font-size:18px; }
-    .hello .sub{ color:var(--muted); font-size:12px; }
-    .btn-sm{
-      padding:8px 10px; border-radius:10px; border:1px solid var(--ring); background:#fff; color:var(--brand-2);
-      text-decoration:none; font-weight:600;
+    :root {
+      --bs-font-sans-serif: 'Inter', sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --bottom-nav-height: 70px;
     }
 
-    /* flashes */
-    .flashes{ margin-bottom:16px; display:flex; flex-direction:column; gap:8px; }
-    .flash{ padding:12px 14px; border-radius:12px; font-size:14px; font-weight:600; border:1px solid transparent; }
-    .flash.success{ background:#e9f9f2; color:#0d7a5a; border-color:#cfeee1; }
-    .flash.error{ background:#ffe4e4; color:#8a1a1a; border-color:#f7c2c2; }
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      padding-bottom: calc(var(--bottom-nav-height) + 20px);
+    }
 
+    /* --- HEADER --- */
+    .app-header {
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .welcome-text { font-size: 1.1rem; font-weight: 700; color: #1f2937; margin: 0; }
+    .date-text { font-size: 0.75rem; color: #6b7280; margin-top: 2px; }
 
-    /* cards y listas */
-    .card{
-      background:var(--card); border-radius:var(--radius);
-      border:1px solid var(--ring); box-shadow:0 1px 2px rgba(15,23,42,.06),0 6px 14px rgba(2,6,23,.04);
-      margin-top:12px; padding:12px;
+    /* --- KPI CARDS --- */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 1.5rem;
     }
-    .kpis{ display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
-    .kpi{ 
-      background:#fafbff; border:1px solid var(--ring); border-radius:12px; padding:10px; text-align:center;
-      transition: all 0.2s;
+    .kpi-card {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      padding: 12px;
+      text-align: center;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+      transition: transform 0.1s;
+      text-decoration: none;
+      color: inherit;
     }
-    .kpi:hover{ opacity:0.9; }
-    .kpi .tag{ font-size:11px; color:var(--muted); }
-    .kpi .val{ font-size:22px; font-weight:800; margin-top:2px; }
-    .kpi.ok  .val{ color:#0d7a5a } 
-    .kpi.warn .val{ color:#8a5a07 } 
-    .kpi.link{ background:var(--brand-2); color:white; border-color:var(--brand-2); text-decoration:none; }
-    .kpi.link .tag{ color:white; opacity:0.8; }
-    .kpi.link .val{ color:white; }
+    .kpi-card:active { transform: scale(0.98); }
+    
+    .kpi-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
+    .kpi-value { font-size: 1.4rem; font-weight: 800; color: #1f2937; line-height: 1; }
+    
+    .kpi-warn .kpi-value { color: #d97706; }
+    .kpi-ok .kpi-value { color: #059669; }
+    .kpi-primary { background-color: var(--bs-primary); border-color: var(--bs-primary); color: #fff; }
+    .kpi-primary .kpi-label { color: rgba(255,255,255,0.8); }
+    .kpi-primary .kpi-value { color: #fff; }
 
-    .sec-h{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
-    .sec-h h2{ margin:0; font-size:16px; }
-    .sub{ color:var(--muted); font-size:12px; }
+    /* --- CUPOS DEL DÍA --- */
+    .section-title { font-size: 0.9rem; font-weight: 700; color: #374151; margin-bottom: 10px; text-transform: uppercase; padding-left: 4px; }
+    
+    .quota-item {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 0.8rem;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .quota-info { flex-grow: 1; margin-right: 1rem; }
+    .quota-name { font-weight: 700; color: #1f2937; font-size: 1rem; margin-bottom: 4px; }
+    .quota-stats { font-size: 0.75rem; color: #6b7280; display: flex; justify-content: space-between; margin-bottom: 6px; }
+    
+    .progress-custom { height: 6px; background-color: #f1f5f9; border-radius: 3px; overflow: hidden; }
+    .progress-bar-custom { height: 100%; background-color: var(--bs-primary); border-radius: 3px; }
 
-    /* areneras del día */
-    .arenas{ display:grid; gap:8px; }
-    .arena{ border:1px solid var(--ring); border-radius:12px; padding:10px; background:#fff; display:flex; gap:10px; align-items:center; }
-    .arena .meta{ flex:1; }
-    .arena .name{ font-weight:700; font-size:14px; }
-    .bar{ height:6px; width:100%; background:#eef2ff; border:1px solid var(--ring); border-radius:6px; overflow:hidden; margin-top:6px; }
-    .bar > span{ display:block; height:100%; background:linear-gradient(90deg, var(--brand-2), #7aa7ff); width:0%; }
-    .arena .act{ }
-    .btn{
-      padding:10px 12px; border-radius:12px; border:1px solid var(--brand-2);
-      background:var(--brand-2); color:#fff; font-weight:700; text-decoration:none; display:inline-block;
-      min-width:140px; text-align:center;
+    .btn-load {
+      padding: 0.6rem 1.2rem;
+      font-weight: 700;
+      font-size: 0.85rem;
+      border-radius: 10px;
+      background: var(--bs-primary);
+      color: #fff;
+      border: none;
+      white-space: nowrap;
+      text-decoration: none;
     }
-    .btn.outline{ background:#fff; color:var(--brand-2); }
-    .btn[disabled]{ opacity:.5; pointer-events:none; }
+    .btn-load.disabled { background: #e5e7eb; color: #9ca3af; pointer-events: none; }
 
-    /* lista de viajes */
-    .search{ margin-bottom:8px; }
-    .in{
-      width:100%; min-height:40px; padding:10px 12px; border-radius:12px; border:1px solid var(--ring); background:#fff; color:var(--ink);
-    }
-    .list{ display:flex; flex-direction:column; gap:8px; }
-    .trip{ border:1px solid var(--ring); border-radius:12px; background:#fff; padding:10px; }
-    .row{ display:flex; justify-content:space-between; gap:8px; }
-    .t-title{ font-weight:700; }
-    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .pill.ok{ background:#e9f9f2; color:#0d7a5a; border:1px solid #cfeee1; }
-    .pill.warn{ background:#fff3d6; color:#8a5a07; border:1px solid #ffe7a3; }
-    .pill.bad{ background:#ffe4e4; color:#8a1a1a; border:1px solid #f7c2c2; }
-    .meta{ color:var(--muted); font-size:12px; margin-top:4px; }
+    /* --- LISTA VIAJES --- */
+    .search-container { margin-bottom: 1rem; }
+    .search-input { border-radius: 10px; padding: 0.7rem 1rem; border: 1px solid #e5e7eb; font-size: 0.9rem; }
+    .search-input:focus { border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
 
-    /* navbar inferior sticky */
-    .nav{
-      position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--ring);
-      display:flex; justify-content:space-around; padding:8px 10px; z-index:10;
+    .trip-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 0.8rem;
+      border: 1px solid #e5e7eb;
     }
-    .nav a{
-      flex:1; text-align:center; color:var(--brand-2); text-decoration:none; font-weight:700;
-      padding:10px 8px; border-radius:10px;
+    .trip-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .trip-driver { font-weight: 700; color: #1f2937; }
+    .trip-meta { font-size: 0.8rem; color: #6b7280; }
+    
+    .status-pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+    .status-ok { background: #ecfdf5; color: #065f46; }
+    .status-warn { background: #fffbeb; color: #b45309; }
+    
+    .btn-del { border: none; background: transparent; color: #ef4444; padding: 4px; }
+
+    /* --- BOTTOM NAV --- */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: var(--bottom-nav-height); background: #fff; border-top: 1px solid #e5e7eb;
+      display: flex; justify-content: space-around; align-items: center; z-index: 1000;
     }
-    .nav a.active{ background:#eef2ff; }
-    @media (min-width:740px){
-      .wrap{ padding-bottom:90px; }
+    .nav-item-link {
+      display: flex; flex-direction: column; align-items: center;
+      text-decoration: none; color: #9ca3af; font-size: 0.75rem; font-weight: 500;
     }
-    .icon-btn{
-    border:1px solid var(--ring);
-    background:#fff;
-    color:#b91c1c;
-    border-radius:10px;
-    padding:6px 10px;
-    font-weight:700;
-    cursor:pointer;
-    margin-left:8px;
-  }
-  .icon-btn:focus{ outline:none; box-shadow:0 0 0 3px rgba(239,68,68,.15); }
-  .icon-btn:hover{ background:#fff5f5; }
-  .actions{ display:flex; align-items:center; gap:8px; }
-  .btn-icon{
-  padding:8px 10px; border-radius:10px;
-  border:1px solid var(--ring); background:#fff; color:var(--brand-2);
-  text-decoration:none; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
-  min-width:40px;
-  }
-  .btn-group{ display:flex; gap:8px; align-items:center; }
+    .nav-item-link i { font-size: 1.5rem; margin-bottom: 4px; }
+    .nav-item-link.active { color: var(--bs-primary); }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div class="hello">
-        <h1>Hola, {{ user.username }}</h1>
-        <div class="sub">Hoy es {{ (today or datetime.utcnow().date()).strftime('%d/%m/%Y') }}</div>
-      </div>
-      <div class="btn-group">
-        <a class="btn-icon" href="{{ url_for('change_password') }}" title="Ajustes de cuenta">⚙️</a>
-        <a class="btn-sm"   href="{{ url_for('logout') }}">Cerrar sesión</a>
-      </div>
-    </div>
-    
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flashes">
-          {% for category, message in messages %}
-            <div class="flash {{ 'success' if category in ['success','ok'] else 'error' }}">{{ message }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
 
-    <div class="card">
-      <div class="kpis">
-        <div class="kpi warn">
-          <div class="tag">En viaje</div>
-          <div class="val">{{ stats.en_viaje }}</div>
-        </div>
-        <div class="kpi ok">
-          <div class="tag">Llegados</div>
-          <div class="val">{{ stats.llegados }}</div>
-        </div>
-        <a class="kpi link" href="{{ url_for('transportista_choferes') }}" style="text-align:center;">
-          <div class="tag">Mis Choferes</div>
-          <div class="val">{{ choferes|length }}</div>
+  <div class="app-header">
+    <div>
+        <h1 class="welcome-text">Hola, {{ user.username }}</h1>
+        <div class="date-text">{{ (today or get_arg_today()).strftime('%d/%m/%Y') }}</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('change_password') }}" class="btn btn-sm text-secondary" title="Cambiar mi contraseña">
+        <i class="fa-solid fa-gear fa-lg"></i>
         </a>
-      </div>
-      <div class="sub" style="margin-top:6px;">
-      Muestra los datos de la Semana: {{ stats.week_from.strftime('%d/%m') }} al {{ stats.week_to.strftime('%d/%m') }}
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="sec-h">
-        <h2>Tus cupos de hoy</h2>
-        <div class="sub">{{ assignments|length }} arenera{{ '' if assignments|length==1 else 's' }}</div>
-      </div>
-      {% if assignments %}
-      <div class="arenas">
-        {% for it in assignments %}
-          {% set used = it.daily_used or 0 %}
-          {% set lim  = it.daily_limit or 0 %}
-          {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
-          <div class="arena">
-            <div class="meta">
-              <div class="name">{{ it.arenera.username }}</div>
-              <div class="sub">{{ used }} / {{ lim }} usados</div>
-              <div class="bar"><span style="width:{{ pct }}%"></span></div>
-            </div>
-            <div class="act">
-              <a class="btn" href="{{ url_for('transportista_arenera', arenera_id=it.arenera.id) }}" {% if lim==0 or used>=lim %}aria-disabled="true" {% endif %}>
-                Cargar viaje
-              </a>
-            </div>
-          </div>
-        {% endfor %}
-      </div>
-      {% else %}
-        <div class="sub">No tenés cupos asignados hoy.</div>
-      {% endif %}
-    </div>
-
-    <div class="card">
-      <div class="sec-h"><h2>Mis viajes</h2></div>
-      <div class="search">
-        <input id="q" class="in" type="text" placeholder="Buscar chofer / DNI / patente">
-      </div>
-      {% if envios and envios|length %}
-        <div class="list" id="lista">
-          {% for s in envios %}
-          <div class="trip" data-find="{{ (s.chofer ~ ' ' ~ s.dni ~ ' ' ~ s.tractor ~ ' ' ~ s.trailer)|lower }}">
-            <div class="row">
-              <div class="t-title">{{ s.chofer }}</div>
-              <div class="actions">
-                {% if s.status == 'Llego' %}
-                  <span class="pill ok">Llegó</span>
-                {% elif s.status == 'En viaje' %}
-                  <span class="pill warn">En viaje</span>
-                  <form method="post"
-                        action="{{ url_for('delete_own_shipment', ship_id=s.id) }}"
-                        onsubmit="return confirm('¿Eliminar este viaje?');"
-                        style="display:inline;">
-                    <button type="submit" class="icon-btn" title="Eliminar">✕</button>
-                  </form>
-                {% else %}
-                  <span class="pill warn"></span>
-                {% endif %}
-              </div>
-            </div>
-            <div class="meta">
-              {{ s.date.strftime('%d/%m/%Y') }} · {{ s.arenera.username }} · {{ s.tipo }} · {{ s.tractor }} / {{ s.trailer }}
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <div class="sub">Aún no hay viajes cargados hoy.</div>
-      {% endif %}
+        <a href="{{ url_for('logout') }}" class="btn btn-sm text-danger fw-medium" title="Cerrar Sesión">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i>
+        </a>
     </div>
   </div>
 
-  <nav class="nav">
-    <a class="active" href="{{ url_for('transportista_panel') }}">Inicio</a>
-    <a href="{{ url_for('transportista_quotas') }}">Cuotas</a>
-    <a href="{{ url_for('transportista_history') }}">Historial</a>
+  <div class="container-xl px-3">
+
+    <div class="kpi-grid">
+        <div class="kpi-card kpi-warn">
+            <div class="kpi-label">En Viaje</div>
+            <div class="kpi-value">{{ stats.en_viaje }}</div>
+        </div>
+        <div class="kpi-card kpi-ok">
+            <div class="kpi-label">Llegados</div>
+            <div class="kpi-value">{{ stats.llegados }}</div>
+        </div>
+        <a href="{{ url_for('transportista_choferes') }}" class="kpi-card kpi-primary">
+            <div class="kpi-label">Choferes</div>
+            <div class="kpi-value"><i class="fa-solid fa-users"></i></div>
+        </a>
+    </div>
+
+    <div class="mb-4">
+        <h6 class="section-title">Cupos Disponibles Hoy</h6>
+        {% if assignments %}
+            {% for it in assignments %}
+                {% set used = it.daily_used or 0 %}
+                {% set lim  = it.daily_limit or 0 %}
+                {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
+                
+                <div class="quota-item">
+                    <div class="quota-info">
+                        <div class="quota-name">{{ it.arenera.username }}</div>
+                        <div class="quota-stats">
+                            <span>{{ used }} / {{ lim }} camiones</span>
+                            <span>{{ pct }}%</span>
+                        </div>
+                        <div class="progress-custom">
+                            <div class="progress-bar-custom" style="width: {{ pct }}%"></div>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('transportista_arenera', arenera_id=it.arenera.id) }}" 
+                       class="btn-load {{ 'disabled' if lim > 0 and used >= lim else '' }}">
+                        Cargar
+                    </a>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-center py-4 bg-white border rounded-3">
+                <p class="text-muted m-0 small">No tienes cupos asignados para hoy.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <div>
+        <h6 class="section-title">Mis Viajes ({{ envios|length }})</h6>
+        
+        <div class="search-container">
+            <input type="text" id="q" class="form-control search-input" placeholder="Buscar chofer, patente...">
+        </div>
+
+        <div id="lista-viajes">
+            {% if envios %}
+                {% for s in envios %}
+                <div class="trip-card" data-search="{{ (s.chofer ~ ' ' ~ s.dni ~ ' ' ~ s.tractor)|lower }}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="trip-driver">{{ s.chofer }}</div>
+                            <div class="trip-meta">{{ s.arenera.username }} • {{ s.tractor }}</div>
+                            <div class="trip-meta text-muted small mt-1">{{ s.date.strftime('%d/%m') }} • {{ s.tipo }}</div>
+                        </div>
+                        
+                        <div class="text-end">
+                            {% if s.status == 'Llego' %}
+                                <span class="status-pill status-ok">Llegó</span>
+                            {% else %}
+                                <span class="status-pill status-warn d-block mb-1">En Viaje</span>
+                                <form method="post" action="{{ url_for('delete_own_shipment', ship_id=s.id) }}" 
+                                      onsubmit="return confirm('¿Eliminar este viaje?');">
+                                    <button type="submit" class="btn-del"><i class="fa-solid fa-trash"></i></button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center py-5 text-muted opacity-50">
+                    <i class="fa-solid fa-route fa-2x mb-2"></i>
+                    <p class="small">Aún no has cargado viajes.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+  </div>
+
+  <nav class="bottom-nav">
+    <a href="{{ url_for('transportista_panel') }}" class="nav-item-link active">
+        <i class="fa-solid fa-house"></i><span>Inicio</span>
+    </a>
+    <a href="{{ url_for('transportista_quotas') }}" class="nav-item-link">
+        <i class="fa-solid fa-calendar-check"></i><span>Cupos</span>
+    </a>
+    <a href="{{ url_for('transportista_history') }}" class="nav-item-link">
+        <i class="fa-solid fa-clock-rotate-left"></i><span>Historial</span>
+    </a>
   </nav>
 
   <script>
-    // Búsqueda local en los viajes
-    (function(){
-      const q = document.getElementById('q');
-      const list = document.getElementById('lista');
-      if(!q || !list) return;
-      q.addEventListener('input', function(){
-        const needle = (q.value || '').trim().toLowerCase();
-        for(const card of list.children){
-          const hay = !needle || (card.getAttribute('data-find') || '').includes(needle);
-          card.style.display = hay ? '' : 'none';
+    // Buscador JS
+    document.addEventListener('DOMContentLoaded', () => {
+        const input = document.getElementById('q');
+        const list = document.getElementById('lista-viajes');
+        
+        if(input && list) {
+            input.addEventListener('input', () => {
+                const term = input.value.trim().toLowerCase();
+                Array.from(list.children).forEach(card => {
+                    const text = card.getAttribute('data-search') || '';
+                    card.style.display = text.includes(term) ? '' : 'none';
+                });
+            });
         }
-      });
-    })();
+
+        // Flash Messages
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    Swal.fire({
+                        toast: true, position: 'top',
+                        icon: "{{ 'success' if category in ['ok','success'] else 'info' }}",
+                        title: "{{ message }}", showConfirmButton: false, timer: 3000
+                    });
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    });
   </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
