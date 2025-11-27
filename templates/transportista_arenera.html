@@ -166,6 +166,7 @@
       <h5 class="fw-bold mb-3"><i class="fa-solid fa-truck-fast text-primary me-2"></i>Nuevo Viaje</h5>
       
       <form method="post" action="" id="tripForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         
         <div class="mb-3">
             <label class="form-label">DNI Chofer</label>
@@ -245,6 +246,7 @@
                     {% else %}
                         <span class="badge-status status-viaje mb-1 d-inline-block">En Viaje</span>
                         <form method="post" action="" onsubmit="return confirm('¿Borrar este viaje?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <input type="hidden" name="delete_id" value="{{ s.id }}">
                             <button type="submit" class="btn btn-sm btn-link text-danger p-0 text-decoration-none" style="font-size:0.8rem;">
                                 <i class="fa-solid fa-trash"></i> Borrar

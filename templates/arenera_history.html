@@ -78,6 +78,7 @@
     
     <div class="filter-bar">
         <form method="get" action="{{ url_for('arenera_history') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="col-6 col-md-auto">
                 <label class="small text-muted fw-bold">DESDE</label>
                 <input type="date" name="start_date" class="form-control form-control-sm" value="{{ start_date }}">
@@ -173,6 +174,7 @@
                             <td class="text-end">
                                 {% if (s.status == 'Salido a SBE' or (s.remito_arenera and not s.sbe_fecha_llegada)) and s.cert_status != 'Certificado' %}
                                     <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}" class="form-revertir">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <input type="hidden" name="action" value="revertir">
                                         <button type="submit" class="btn btn-outline-danger btn-sm" title="Corregir">
                                             <i class="fa-solid fa-rotate-left"></i>
@@ -228,6 +230,7 @@
                     {% if (s.status == 'Salido a SBE' or (s.remito_arenera and not s.sbe_fecha_llegada)) and s.cert_status != 'Certificado' %}
                     <div class="mt-3 text-end">
                         <form method="post" action="{{ url_for('arenera_update', shipment_id=s.id) }}" class="form-revertir" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                              <input type="hidden" name="action" value="revertir">
                              <button type="submit" class="btn btn-outline-danger btn-sm w-100">
                                 <i class="fa-solid fa-rotate-left me-2"></i>Corregir Salida

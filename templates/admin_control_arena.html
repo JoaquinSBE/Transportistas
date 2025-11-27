@@ -116,6 +116,7 @@
 
     <div class="card-custom p-4">
         <form method="GET" class="row g-3 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="col-md-4">
                 <label class="form-label-sm">Planta Arenera</label>
                 <div class="input-group">

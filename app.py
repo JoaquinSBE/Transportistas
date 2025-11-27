@@ -16,11 +16,11 @@ import time
 from zoneinfo import ZoneInfo
 from xhtml2pdf import pisa
 from flask_mail import Mail, Message
+from flask_wtf.csrf import CSRFProtect  # Protección CSRF
 
 # ----------------------------
 # CONFIGURACIÓN ZONA HORARIA
 # ----------------------------
-# Definimos la zona horaria oficial para toda la app
 ARG_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
 def get_arg_now():
@@ -53,7 +53,6 @@ DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL no está definido. La app requiere PostgreSQL.")
 
-# Normalización a psycopg3 y search_path
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://","postgresql+psycopg://", 1)
 elif DATABASE_URL.startswith("postgresql://"):
@@ -70,6 +69,9 @@ if DATABASE_URL.startswith("postgresql+psycopg://"):
 app = Flask(__name__, template_folder="templates")
 app.secret_key = SECRET_KEY
 
+# Inicializar protección CSRF globalmente
+csrf = CSRFProtect(app) 
+
 app.jinja_env.globals.update(get_arg_today=get_arg_today)
 
 app.config.update(
@@ -81,6 +83,9 @@ app.config.update(
         "pool_pre_ping": True,
         "pool_recycle": 1800,
     },
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=(os.getenv("FLASK_ENV") == "production" or os.getenv("USE_HTTPS") == "True")
 )
 
 db = SQLAlchemy(app)
@@ -96,7 +101,6 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER')
 
-# Log “seguro” del DSN (sin credenciales)
 _safe = DATABASE_URL.split("@", 1)[-1] if "@" in DATABASE_URL else DATABASE_URL
 app.logger.info(
     "DB URI efectiva → postgresql://***:***@" + _safe
@@ -104,10 +108,8 @@ app.logger.info(
     "DB URI efectiva → " + _safe
 )
 
-# Aseguro carpeta para el log de contraseñas
 os.makedirs(os.path.dirname(PASSWORD_LOG), exist_ok=True)
 
-# Helper de templates con extensión configurable
 def tpl(name: str) -> str:
     return f"{name}{TPL_EXT}"
 
@@ -139,7 +141,6 @@ def _resolve_range(data: dict):
     return hoy, hoy
 
 def get_maestro_id(user_id):
-    """Retorna el ID del maestro (padre) o el ID del usuario si es maestro."""
     u = db.session.get(User, user_id)
     if not u:
         return None
@@ -148,13 +149,10 @@ def get_maestro_id(user_id):
     return u.id
 
 def get_family_ids(user_id):
-    """Devuelve una lista con el ID del maestro y todos sus sub-usuarios."""
     maestro_id = get_maestro_id(user_id)
     if not maestro_id:
         return []
-
     sub_users = db.session.query(User.id).filter_by(parent_id=maestro_id).all()
-    
     ids = [maestro_id] + [u.id for u in sub_users]
     return ids
 
@@ -202,7 +200,7 @@ class User(db.Model):
     id             = db.Column(db.Integer, primary_key=True)
     username       = db.Column(db.String(50), unique=True, nullable=False, index=True)
     password_hash  = db.Column(db.String(512), nullable=False)
-    tipo           = db.Column(db.String(20), nullable=False) # admin, transportista, arenera, gestion
+    tipo           = db.Column(db.String(20), nullable=False)
     email          = db.Column(db.String(120), nullable=True)
     custom_price   = db.Column(db.Float, default=0.0)
     cert_type      = db.Column(db.String(20), default='llegada')
@@ -210,33 +208,10 @@ class User(db.Model):
     sub_users      = db.relationship("User", backref=db.backref("parent", remote_side=[id]),lazy="dynamic")
     payment_days   = db.Column(db.Integer, default=30)
 
-    shipments_sent = db.relationship(
-        "Shipment",
-        foreign_keys="Shipment.transportista_id",
-        backref="transportista",
-        cascade="all, delete-orphan",
-        lazy="dynamic",
-    )
-    shipments_received = db.relationship(
-        "Shipment",
-        foreign_keys="Shipment.arenera_id",
-        backref="arenera",
-        cascade="all, delete-orphan",
-        lazy="dynamic",
-    )
-    quotas = db.relationship(
-        "Quota",
-        foreign_keys="Quota.transportista_id",
-        backref="transportista_user",
-        cascade="all, delete-orphan",
-        lazy="dynamic",
-    )
-    shipments_operated = db.relationship(
-        "Shipment",
-        foreign_keys="Shipment.operador_id", # <-- NUEVA FK
-        backref="operador",
-        lazy="dynamic",
-    )
+    shipments_sent = db.relationship("Shipment", foreign_keys="Shipment.transportista_id", backref="transportista", cascade="all, delete-orphan", lazy="dynamic")
+    shipments_received = db.relationship("Shipment", foreign_keys="Shipment.arenera_id", backref="arenera", cascade="all, delete-orphan", lazy="dynamic")
+    quotas = db.relationship("Quota", foreign_keys="Quota.transportista_id", backref="transportista_user", cascade="all, delete-orphan", lazy="dynamic")
+    shipments_operated = db.relationship("Shipment", foreign_keys="Shipment.operador_id", backref="operador", lazy="dynamic")
 
 class Shipment(db.Model):
     __tablename__ = "shipment"
@@ -246,7 +221,6 @@ class Shipment(db.Model):
     operador_id      = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True, default=0)
     date             = db.Column(db.Date, nullable=False, index=True)
     
-    # Datos cargados por el Transportista
     chofer           = db.Column(db.String(100), nullable=False)
     dni              = db.Column(db.String(50), nullable=False)
     gender           = db.Column(db.String(10), nullable=False)
@@ -255,12 +229,9 @@ class Shipment(db.Model):
     trailer          = db.Column(db.String(20), nullable=False)
     
     status           = db.Column(db.String(20), nullable=False, default="En viaje", index=True)
-
-    # --- PASO 1: Datos informados por la ARENERA (En planta) ---
     remito_arenera    = db.Column(db.String(50), nullable=True, index=True)
-    peso_neto_arenera = db.Column(db.Float, nullable=True) # Ej: 30.5
+    peso_neto_arenera = db.Column(db.Float, nullable=True)
 
-    # --- PASO 2: Datos oficiales SBE (Vienen de Azure/Excel) ---
     sbe_remito        = db.Column(db.String(50), nullable=True)
     sbe_peso_neto     = db.Column(db.Float, nullable=True)
     sbe_fecha_salida  = db.Column(db.DateTime, nullable=True)
@@ -268,21 +239,19 @@ class Shipment(db.Model):
     sbe_patente       = db.Column(db.String(20), nullable=True)
     sbe_manual_override = db.Column(db.Boolean, default=False)
     
-    # --- PASO 2: Certificación (Admin) ---
     cert_status       = db.Column(db.String(20), default="Pendiente") 
     cert_fecha        = db.Column(db.Date, nullable=True)
     
-    # Datos Finales (Los que valen para pagar)
     final_remito      = db.Column(db.String(50), nullable=True)
     final_peso        = db.Column(db.Float, nullable=True)
     observation_reason = db.Column(db.String(100), nullable=True)
 
-    #Snapshot financiero
     frozen_flete_price = db.Column(db.Float, nullable=True)
     frozen_arena_price = db.Column(db.Float, nullable=True)
     frozen_merma_money = db.Column(db.Float, default=0.0) 
     frozen_flete_neto  = db.Column(db.Float, default=0.0)
-    frozen_flete_iva   = db.Column(db.Float, default=0.0)  
+    frozen_flete_iva   = db.Column(db.Float, default=0.0)
+
 class Quota(db.Model):
     __tablename__ = "quota"
     id               = db.Column(db.Integer, primary_key=True)
@@ -301,15 +270,12 @@ class Chofer(db.Model):
     id                  = db.Column(db.Integer, primary_key=True)
     transportista_id    = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     nombre              = db.Column(db.String(100), nullable=False)
-    dni                 = db.Column(db.String(50), unique=True, nullable=False, index=True) # DNI como clave unica global
+    dni                 = db.Column(db.String(50), unique=True, nullable=False, index=True)
     gender              = db.Column(db.String(10), nullable=True)
     tractor             = db.Column(db.String(20), nullable=True)
     trailer             = db.Column(db.String(20), nullable=True)
     tipo                = db.Column(db.String(20), nullable=True)
-    
-    # Relacion: un Chofer pertenece a un Transportista
     transportista       = db.relationship("User", backref=db.backref("choferes", lazy="dynamic"))
-
     __table_args__      = (
         db.UniqueConstraint("transportista_id", "dni", name="uix_transportista_dni"),
     )
@@ -317,23 +283,16 @@ class Chofer(db.Model):
 class SystemConfig(db.Model):
     __tablename__ = "system_config"
     id             = db.Column(db.Integer, primary_key=True)
-    # Logística
-    tolerance_kg   = db.Column(db.Float, default=700.0)  # Tolerancia (ej: 700 kg)
-    
-    # Económico (Valores por defecto)
-    dispatch_price = db.Column(db.Float, default=0.0)    # Precio Despacho
-    sand_price     = db.Column(db.Float, default=0.0)    # Costo Arena (para multas)
-    transport_price= db.Column(db.Float, default=0.0)    # Precio Transporte por Tn
-    
-    # Emails de notificación (opcional si quieres globales)
+    tolerance_kg   = db.Column(db.Float, default=700.0)
+    dispatch_price = db.Column(db.Float, default=0.0)
+    sand_price     = db.Column(db.Float, default=0.0)
+    transport_price= db.Column(db.Float, default=0.0)
     admin_email    = db.Column(db.String(120), nullable=True)
 
-
 # ----------------------------
-# Bootstrapping DB (schema + tablas + admin)
+# Bootstrapping DB
 # ----------------------------
 with app.app_context():
-    # crea schema si no existe
     if DB_SCHEMA and DB_SCHEMA != "public":
         try:
             db.session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}"))
@@ -341,17 +300,14 @@ with app.app_context():
         except Exception:
             db.session.rollback()
 
-    # crea tablas
     db.create_all()
 
-    # ampliar columna de hash si quedó corta de una versión anterior
     try:
         db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(512)'))
         db.session.commit()
     except Exception:
         db.session.rollback()
 
-    # asegura admin por defecto
     admin = db.session.query(User).filter(func.lower(User.username) == norm_username(ADMIN_USER)).first()
     if not admin:
         admin = User(
@@ -380,7 +336,6 @@ def role_required(*roles):
             if session.get("tipo") not in roles:
                 flash("No tienes permisos para acceder a esta sección.", "error")
                 return redirect(url_for("login_page"))
-            
             return f(*args, **kwargs)
         return wrapped
     return deco
@@ -403,16 +358,14 @@ def login():
         session.clear()
         session["user_id"] = user.id
         session["tipo"]    = user.tipo
+        session.modified = True 
 
         if user.tipo == "admin":
             return redirect(url_for("admin_panel"))
-            
         if user.tipo == "gestion":
             return redirect(url_for("admin_dashboard"))
-            
         if user.tipo == "transportista":
             return redirect(url_for("transportista_panel"))
-            
         if user.tipo == "arenera":
             return redirect(url_for("arenera_panel"))
             
@@ -424,9 +377,6 @@ def logout():
     session.clear()
     return redirect(url_for("login_page"))
 
-# ----------------------------
-# CAMBIO DE CLAVE
-# ----------------------------
 @app.route("/change_password", methods=["GET", "POST"])
 @login_required
 def change_password():
@@ -450,48 +400,52 @@ def change_password():
 @role_required("admin")
 def admin_panel():
     today = get_arg_today()
-    
-    # Calcular inicio y fin de semana para filtrar cuotas
     week_start = today - timedelta(days=today.weekday())
     week_end   = week_start + timedelta(days=6)
     
-    # 1. Transportistas
-    t_list = []
-    for t in User.query.filter_by(tipo="transportista").all():
-        total_sent = Shipment.query.filter_by(transportista_id=t.id).count()
-        
-        # Sumar límites y usados de la semana
-        q_stats = db.session.query(
-            func.sum(Quota.limit).label('total'),
-            func.sum(Quota.used).label('used')
-        ).filter(
-            Quota.transportista_id == t.id,
-            Quota.date >= week_start,
-            Quota.date <= week_end
-        ).first()
+    stats_shipments = db.session.query(
+        Shipment.transportista_id, 
+        func.count(Shipment.id)
+    ).group_by(Shipment.transportista_id).all()
+    map_shipments = {tid: count for tid, count in stats_shipments}
 
-        limit = q_stats.total or 0
-        used  = q_stats.used or 0
+    stats_quotas = db.session.query(
+        Quota.transportista_id,
+        func.sum(Quota.limit).label('total'),
+        func.sum(Quota.used).label('used')
+    ).filter(
+        Quota.date >= week_start,
+        Quota.date <= week_end
+    ).group_by(Quota.transportista_id).all()
+    map_quotas = {tid: (limit or 0, used or 0) for tid, limit, used in stats_quotas}
+
+    all_transportistas = User.query.filter_by(tipo="transportista").all()
+    t_list = []
+    
+    for t in all_transportistas:
+        total_sent = map_shipments.get(t.id, 0)
+        limit, used = map_quotas.get(t.id, (0, 0))
         remaining = max(0, limit - used)
 
         t_list.append({
             "t": t, 
             "sent": total_sent, 
-            "quota": remaining,    # El resultado (Total - Tomados)
-            "quota_limit": limit,  # El Total
-            "quota_used": used     # Los Tomados
+            "quota": remaining,
+            "quota_limit": limit,
+            "quota_used": used
         })
 
-    # 2. Areneras (Maestras)
+    stats_areneras = db.session.query(
+        Shipment.arenera_id, func.count(Shipment.id)
+    ).group_by(Shipment.arenera_id).all()
+    map_areneras_ship = {aid: count for aid, count in stats_areneras}
+
     a_list = []
     for a in User.query.filter_by(tipo="arenera", parent_id=None).all():
-        total_ship = Shipment.query.filter_by(arenera_id=a.id).count()
+        total_ship = map_areneras_ship.get(a.id, 0)
         a_list.append({"a": a, "shipments": total_ship})
 
-    # 3. Sub-Areneras
     sub_a_list = User.query.filter(User.tipo=="arenera", User.parent_id != None).all()
-
-    # 4. Gestión
     g_list = User.query.filter_by(tipo="gestion").all()
 
     return render_template(
@@ -510,10 +464,9 @@ def create_user():
     pwd   = (request.form.get("password") or "").strip()
     tipo  = request.form.get("tipo")
     
-    # Lógica para sub-arenera
     parent_id = None
     if tipo == "sub_arenera":
-        tipo = "arenera" # En base de datos sigue siendo 'arenera'
+        tipo = "arenera"
         try:
             parent_id = int(request.form.get("parent_id"))
         except (TypeError, ValueError):
@@ -556,7 +509,6 @@ def reset_password_admin():
         flash("Usuario no encontrado.", "error")
         return redirect(url_for("admin_panel"))
         
-    # Generamos el hash seguro sin guardar el texto plano
     u.password_hash = generate_password_hash(new_pass)
     db.session.commit()
     
@@ -586,12 +538,8 @@ def delete_user(user_id):
 @role_required("admin")
 def manage_quotas(transportista_id):
     t = User.query.get_or_404(transportista_id)
-    
-    # CORRECCIÓN: Solo traemos areneras MAESTRAS (parent_id es None)
-    # Los sub-usuarios no tienen cuota propia, usan la del maestro.
     areneras = User.query.filter(User.tipo == "arenera", User.parent_id == None).order_by(User.username.asc()).all()
 
-    # leer fecha inicial desde POST o GET
     if request.method == "POST":
         start_str = (request.form.get("start_date") or "").strip()
     else:
@@ -613,9 +561,7 @@ def manage_quotas(transportista_id):
                     key = f"q_{a.id}_{d.isoformat()}"
                     raw = (request.form.get(key) or "").strip()
 
-                    # Vacío o "0" => borrar (si existe)
                     if raw == "" or raw == "0":
-                        # Usamos db.session.query para evitar problemas de autoflush
                         q = db.session.query(Quota).filter_by(
                             transportista_id=transportista_id,
                             arenera_id=a.id,
@@ -626,7 +572,6 @@ def manage_quotas(transportista_id):
                             total_deletes += 1
                         continue
 
-                    # Parsear límite
                     try:
                         v = int(raw)
                     except ValueError:
@@ -640,13 +585,11 @@ def manage_quotas(transportista_id):
                     ).first()
 
                     if q:
-                        # Update
                         q.limit = v
                         if (q.used or 0) > v:
                             q.used = v
                         total_updates += 1
                     else:
-                        # Insert
                         q = Quota(
                             transportista_id=transportista_id,
                             arenera_id=a.id,
@@ -665,7 +608,6 @@ def manage_quotas(transportista_id):
 
         return redirect(url_for("manage_quotas", transportista_id=transportista_id, start=start_date.isoformat()))
 
-    # GET: armar datos para la grilla
     existing = (
         Quota.query
         .filter(
@@ -675,7 +617,6 @@ def manage_quotas(transportista_id):
     )
     quota_map = {(q.arenera_id, q.date): q for q in existing}
 
-    # Contar usados (Filtrando por el ID maestro de la arenera en Shipment)
     from sqlalchemy import func
     used_rows = (
         db.session.query(
@@ -703,8 +644,6 @@ def manage_quotas(transportista_id):
         start_date=start_date
     )
 
-
-# Listado general de camiones (admin)
 @app.route("/admin/todos_camiones")
 @login_required
 @role_required("admin")
@@ -717,7 +656,6 @@ def todos_camiones():
 
     q = Shipment.query
 
-    # fechas (opcionales)
     try:
         if dfrom_str:
             q = q.filter(Shipment.date >= date.fromisoformat(dfrom_str))
@@ -742,13 +680,10 @@ def todos_camiones():
         dfrom=dfrom_str, dto=dto_str
     )
 
-
-# ----------------------------
-# DASHBOARD ADMIN - API de datos
-# ----------------------------
 @app.post("/admin/dashboard_data")
 @login_required
 @role_required("admin", "gestion")
+@csrf.exempt 
 def admin_dashboard_data():
     # --- A. FILTROS Y CONSULTA ---
     data = request.get_json(silent=True) or {}
@@ -766,10 +701,7 @@ def admin_dashboard_data():
     conf = get_config()
     tol_tn = conf.tolerance_kg / 1000.0
 
-    # --- B. LÓGICA DE ESTADOS (NUEVO RASTREO) ---
-    
-    # 1. Yendo a Arenera (Tramo 1)
-    # Criterio: No tiene peso de carga Y no ha llegado a SBE (por si acaso)
+    # --- B. LÓGICA DE ESTADOS (KPIs DE LOGÍSTICA) ---
     ships_to_source = [
         s for s in all_ships 
         if (not s.peso_neto_arenera or s.peso_neto_arenera == 0) 
@@ -777,8 +709,6 @@ def admin_dashboard_data():
     ]
     count_to_source = len(ships_to_source)
 
-    # 2. Yendo a SBE (Tramo 2 - Cargado)
-    # Criterio: TIENE peso de carga (>0) PERO NO tiene fecha de llegada SBE
     ships_to_dest = [
         s for s in all_ships 
         if (s.peso_neto_arenera and s.peso_neto_arenera > 0) 
@@ -787,19 +717,13 @@ def admin_dashboard_data():
     count_to_dest = len(ships_to_dest)
     tn_to_dest    = sum(s.peso_neto_arenera for s in ships_to_dest)
 
-    # 3. Descargados en SBE (Finalizados)
-    # Criterio: Tiene fecha de llegada SBE (Confirmado por balanza destino)
     ships_arrived = [s for s in all_ships if s.sbe_fecha_llegada is not None]
     count_arrived = len(ships_arrived)
     tn_arrived    = sum(s.final_peso or s.sbe_peso_neto or 0 for s in ships_arrived)
-    tn_recibidas_total = sum(s.final_peso or s.sbe_peso_neto or 0 for s in all_ships)
-
-    # Totales generales para KPI
-    total_viajes = len(all_ships)
-    total_moving = count_to_source + count_to_dest # Total activos en mapa
     
+    total_viajes = len(all_ships)
+    total_moving = count_to_source + count_to_dest
     tn_despachadas_total = sum(s.peso_neto_arenera or 0 for s in all_ships)
-    avg_carga = (tn_arrived / count_arrived) if count_arrived > 0 else 0
 
     # --- C. CÁLCULOS FINANCIEROS Y GRÁFICOS ---
     daily_stats = {}
@@ -809,7 +733,7 @@ def admin_dashboard_data():
     total_costo_proyectado = 0.0
 
     for s in all_ships:
-        # Gráfico Diario
+        # 1. Gráfico Diario (Volumen físico real por día de salida)
         d_str = s.date.isoformat()
         if d_str not in daily_stats: daily_stats[d_str] = {"out": 0.0, "in": 0.0}
         
@@ -819,22 +743,25 @@ def admin_dashboard_data():
         daily_stats[d_str]["out"] += w_out
         daily_stats[d_str]["in"]  += w_in
 
-        # Rankings
+        # 2. Rankings
         a_name = s.arenera.username
         arenera_volumen[a_name] = arenera_volumen.get(a_name, 0) + w_out
         
         t_name = s.transportista.username
         top_trans_map[t_name] = top_trans_map.get(t_name, 0) + w_in
 
-        # --- CÁLCULO DE PAGOS ---
-        base_date = s.cert_fecha or s.date
+        # 3. CÁLCULO DE DINERO (Estimación para KPI "Total Proyectado")
         
-        # A. Flete
-        if w_in > 0:
-            neto_flete = 0.0
+        # Determinamos si usamos valores congelados (ya certificado) o actuales (estimación)
+        neto_flete = 0.0
+        neto_arena = 0.0
+        
+        # --- CÁLCULO FLETE ---
+        if w_in > 0: # Solo si hay peso de llegada (o SBE)
             if s.frozen_flete_neto is not None:
                 neto_flete = s.frozen_flete_neto
             else:
+                # Estimación al vuelo
                 price_flete = s.transportista.custom_price or 0
                 price_arena_ref = s.arenera.custom_price or 0
                 tn_base = w_out if s.arenera.cert_type == 'salida' else w_in
@@ -843,38 +770,53 @@ def admin_dashboard_data():
                     diff = w_out - w_in
                     if diff > tol_tn: merma_money = (diff - tol_tn) * price_arena_ref
                 neto_flete = (tn_base * price_flete) - merma_money
+        
+        iva_flete = max(0, neto_flete * 1.21)
+        total_costo_proyectado += iva_flete # Sumamos al KPI global aunque no esté certificado
 
-            iva_flete = max(0, neto_flete * 1.21)
-            if iva_flete > 0:
-                total_costo_proyectado += iva_flete
-                d_pay = base_date + timedelta(days=(s.transportista.payment_days or 30))
-                payments_detail.append({
-                    "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
-                    "monto": iva_flete, "entidad": s.transportista.username, "tipo": "Flete",
-                    "dia": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()]
-                })
-
-        # B. Arena
+        # --- CÁLCULO ARENA ---
         if w_out > 0:
             p_arena = s.frozen_arena_price if s.frozen_arena_price is not None else (s.arenera.custom_price or 0)
             neto_arena = w_out * p_arena
-            iva_arena = max(0, neto_arena * 1.21)
-            if iva_arena > 0:
-                total_costo_proyectado += iva_arena
-                d_pay = base_date + timedelta(days=(s.arenera.payment_days or 30))
+        
+        iva_arena = max(0, neto_arena * 1.21)
+        total_costo_proyectado += iva_arena # Sumamos al KPI global
+
+        # 4. LISTA DE VENCIMIENTOS (Solo lo CERTIFICADO)
+        # Aquí está la corrección: Solo agregamos a la lista si tiene fecha firme de certificación.
+        if s.cert_status == "Certificado" and s.cert_fecha:
+            
+            # A. Pago Flete
+            if iva_flete > 0:
+                d_pay = s.cert_fecha + timedelta(days=(s.transportista.payment_days or 30))
                 payments_detail.append({
-                    "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
-                    "monto": iva_arena, "entidad": s.arenera.username, "tipo": "Arena",
-                    "dia": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()]
+                    "raw": d_pay, 
+                    "fecha": d_pay.strftime("%d/%m/%Y"),
+                    "monto": iva_flete, 
+                    "entidad": s.transportista.username, 
+                    "tipo": "Flete",
+                    "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()] # <--- CORREGIDO: dia_semana
                 })
 
-    # --- D. PREPARAR JSON ---
+            # B. Pago Arena
+            if iva_arena > 0:
+                d_pay = s.cert_fecha + timedelta(days=(s.arenera.payment_days or 30))
+                payments_detail.append({
+                    "raw": d_pay, 
+                    "fecha": d_pay.strftime("%d/%m/%Y"),
+                    "monto": iva_arena, 
+                    "entidad": s.arenera.username, 
+                    "tipo": "Arena",
+                    "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()] # <--- CORREGIDO: dia_semana
+                })
+
+    # --- D. PREPARAR JSON FINAL ---
     sorted_days = sorted(daily_stats.keys())
     chart_labels = [datetime.strptime(d, "%Y-%m-%d").strftime("%d/%m") for d in sorted_days]
     data_out = [daily_stats[d]["out"] for d in sorted_days]
     data_in  = [daily_stats[d]["in"]  for d in sorted_days]
 
-    # Agrupar pagos
+    # Agrupar pagos para la lista
     pay_map = {}
     for p in payments_detail:
         k = f"{p['raw']}_{p['entidad']}_{p['tipo']}"
@@ -882,6 +824,7 @@ def admin_dashboard_data():
             pay_map[k] = {**p, "count": 0, "monto": 0}
         pay_map[k]["monto"] += p["monto"]
         pay_map[k]["count"] += 1
+    
     payments_final = sorted(pay_map.values(), key=lambda x: x["raw"])
 
     sorted_areneras = sorted(arenera_volumen.items(), key=lambda x: x[1], reverse=True)
@@ -890,14 +833,11 @@ def admin_dashboard_data():
     return {
         "kpi": {
             "viajes_total": total_viajes,
-            
-            # NUEVOS KPIs DE SEGUIMIENTO
-            "viajes_ruta": total_moving,   # Suma de (1) y (2)
-            "to_source": count_to_source,  # (1) Vacíos yendo a arenera
-            "to_dest": count_to_dest,      # (2) Cargados yendo a SBE
-            "tn_to_dest": tn_to_dest,      # Tn flotando en ruta
-            "arrived": count_arrived,      # (3) Llegaron
-            
+            "viajes_ruta": total_moving,
+            "to_source": count_to_source,
+            "to_dest": count_to_dest,
+            "tn_to_dest": tn_to_dest,
+            "arrived": count_arrived,
             "tn_out": tn_despachadas_total,
             "tn_in": tn_arrived,
             "costo_total": total_costo_proyectado
@@ -911,12 +851,10 @@ def admin_dashboard_data():
         }
     }
 
-
 @app.route("/admin/dashboard")
 @login_required
 @role_required("admin", "gestion")
 def admin_dashboard():
-    # Cargamos las areneras para el filtro desplegable
     areneras = User.query.filter_by(tipo="arenera", parent_id=None).order_by(User.username).all()
     return render_template(tpl("admin_dashboard"), areneras=areneras)
 
@@ -927,14 +865,9 @@ def admin_certificacion():
     view_mode  = request.args.get("view", "pendiente")
     tid_filter = request.args.get("transportista_id")
     aid_filter = request.args.get("arenera_id")
-    
-    # Filtros de Fecha (Opcionales para la vista Pendiente, pero útiles)
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
     
-    today = get_arg_today()
-    
-    # Lógica de fechas
     use_date_filter = False
     if start_str and end_str:
         try:
@@ -944,7 +877,6 @@ def admin_certificacion():
         except ValueError:
             pass
 
-    # Listas para selectores
     trans_list = User.query.filter_by(tipo="transportista").order_by(User.username).all()
     aren_list  = User.query.filter_by(tipo="arenera", parent_id=None).order_by(User.username).all()
 
@@ -952,19 +884,15 @@ def admin_certificacion():
     
     if view_mode == "historial":
         q = q.filter(Shipment.cert_status == "Certificado")
-        # Historial filtra por Fecha de Certificación
         if use_date_filter:
             q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date)
         q = q.order_by(Shipment.cert_fecha.desc(), Shipment.id.desc())
     else:
-        # Pendientes filtra por Fecha de Viaje (Salida)
         q = q.filter(Shipment.cert_status != "Certificado")
         if use_date_filter:
             q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date)
-            
         q = q.order_by(case((Shipment.cert_status == "Observado", 1), else_=2), Shipment.date.desc())
 
-    # Filtros de ID
     if tid_filter and tid_filter != "all":
         q = q.filter(Shipment.transportista_id == int(tid_filter))
     if aid_filter and aid_filter != "all":
@@ -980,7 +908,6 @@ def admin_certificacion():
         areneras=aren_list,
         sel_tid=tid_filter,        
         sel_aid=aid_filter,
-        # Pasamos las fechas para mantenerlas en el input (si existen)
         start_date=start_str, 
         end_date=end_str
     )
@@ -991,16 +918,13 @@ def admin_certificacion():
 def certify_shipment(shipment_id):
     s = Shipment.query.get_or_404(shipment_id)
     
-    # 1. Datos Físicos Finales
     s.final_remito = s.sbe_remito if s.sbe_remito else s.remito_arenera
     peso_final = s.sbe_peso_neto if (s.sbe_peso_neto and s.sbe_peso_neto > 0) else s.peso_neto_arenera
     s.final_peso = peso_final
 
-    # 2. Precios al momento
     price_flete = s.transportista.custom_price or 0
     price_arena = s.arenera.custom_price or 0
     
-    # 3. CÁLCULO FINANCIERO (NUEVA FÓRMULA)
     conf = get_config()
     tol_tn = conf.tolerance_kg / 1000.0
     
@@ -1009,39 +933,31 @@ def certify_shipment(shipment_id):
     tn_base_flete = 0.0
 
     if s.arenera.cert_type == 'salida':
-        # Si es por salida, se paga todo lo cargado y no hay multa
         tn_base_flete = peso_salida
         merma_money = 0.0
     else:
-        # Si es por llegada (Estándar)
-        tn_base_flete = peso_final # Se paga sobre lo recibido
-        
-        # Calculamos multa aparte
+        tn_base_flete = peso_final
         diff = peso_salida - peso_final
         if diff > tol_tn:
             excess = diff - tol_tn
-            merma_money = excess * price_arena # Multa = Exceso * Precio Arena
+            merma_money = excess * price_arena
 
-    # Neto = (Tn * Precio Flete) - Multa
     flete_neto = (tn_base_flete * price_flete) - merma_money
     flete_iva  = flete_neto * 1.21
     if flete_iva < 0: flete_iva = 0 
 
-    # 4. Guardar Snapshot
     s.frozen_flete_price = price_flete
     s.frozen_arena_price = price_arena
     s.frozen_merma_money = merma_money
     s.frozen_flete_neto  = flete_neto
     s.frozen_flete_iva   = flete_iva
 
-    # 5. Estado
     s.cert_status = "Certificado"
     s.cert_fecha  = get_arg_today()
     if s.status != "Llego": 
         s.status = "Llego"
 
     db.session.commit()
-    
     flash(f"Viaje #{s.id} certificado. Neto: ${flete_neto:,.0f} (Multa: ${merma_money:,.0f})", "success")
     return redirect(url_for("admin_certificacion"))
 
@@ -1051,7 +967,6 @@ def certify_shipment(shipment_id):
 def corregir_sbe(shipment_id):
     s = Shipment.query.get_or_404(shipment_id)
     
-    # 1. RESET
     if request.form.get("action") == "reset":
         s.sbe_remito = None
         s.sbe_peso_neto = None
@@ -1065,13 +980,11 @@ def corregir_sbe(shipment_id):
         flash("Corrección manual eliminada. Listo para re-sincronizar.", "info")
         return redirect(url_for("admin_certificacion"))
 
-    # 2. GUARDADO MANUAL
     nuevo_remito = request.form.get("sbe_remito", "").strip()
     nuevo_peso   = request.form.get("sbe_peso", "").strip()
     
     if nuevo_remito: 
         s.sbe_remito = nuevo_remito
-        
     if nuevo_peso:   
         try:
             s.sbe_peso_neto = float(nuevo_peso.replace(",", "."))
@@ -1079,20 +992,12 @@ def corregir_sbe(shipment_id):
             flash("Error: Peso inválido.", "error")
             return redirect(url_for("admin_certificacion"))
     
-    # Activar bloqueo manual
     s.sbe_manual_override = True 
-    
-    # --- CORRECCIÓN DE FECHAS (Tu pedido 5 y 6) ---
-    # Si es manual y no tiene fechas de SBE, usamos las fechas del viaje original
-    # para que no queden vacías y el filtro de fechas funcione.
     if not s.sbe_fecha_salida:
-        s.sbe_fecha_salida = datetime.combine(s.date, datetime.min.time()) # Convertir date a datetime
-    
+        s.sbe_fecha_salida = datetime.combine(s.date, datetime.min.time())
     if not s.sbe_fecha_llegada:
-        # Si no hay llegada, asumimos el mismo día de salida por defecto
         s.sbe_fecha_llegada = s.sbe_fecha_salida
 
-    # Recalcular estado
     if s.sbe_remito and s.sbe_peso_neto is not None:
          s.cert_status = "Pre-Aprobado"
          s.observation_reason = "Corregido Manualmente"
@@ -1101,9 +1006,6 @@ def corregir_sbe(shipment_id):
     flash("Datos corregidos. Fechas ajustadas automáticamente.", "success")
     return redirect(url_for("admin_certificacion"))
 
-# ----------------------------
-# PANEL TRANSPORTISTA
-# ----------------------------
 @app.route("/transportista/panel")
 @login_required
 @role_required("transportista")
@@ -1126,7 +1028,6 @@ def transportista_panel():
             Shipment.date <  next_monday
         ).count())
     
-    # 1. CONSULTA AÑADIDA: Obtener la lista de Choferes del transportista
     choferes_list = Chofer.query.filter_by(transportista_id=u.id).all() 
 
     stats = {
@@ -1159,8 +1060,6 @@ def transportista_panel():
         choferes=choferes_list, 
     )
 
-# --- Agregar en app.py ---
-
 @app.route("/transportista/history")
 @login_required
 @role_required("transportista")
@@ -1172,7 +1071,6 @@ def transportista_history():
     status    = (request.args.get("status") or "").strip()
     search    = (request.args.get("search") or "").strip().lower()
 
-    # Rango de fechas inteligente
     min_date = db.session.query(func.min(Shipment.date)).filter_by(transportista_id=u.id).scalar() or get_arg_today()
     max_date = db.session.query(func.max(Shipment.date)).filter_by(transportista_id=u.id).scalar() or get_arg_today()
 
@@ -1187,7 +1085,6 @@ def transportista_history():
     if end_date < start_date:
         start_date, end_date = end_date, start_date
 
-    # Query base
     base_rows = (Shipment.query
                  .filter(
                      Shipment.transportista_id == u.id,
@@ -1197,7 +1094,6 @@ def transportista_history():
                  .order_by(Shipment.date.desc(), Shipment.id.desc())
                  .all())
 
-    # Búsqueda
     if search:
         search_id = -1
         clean_search = search.replace("#", "")
@@ -1209,7 +1105,7 @@ def transportista_history():
             if s.id == search_id: return True
             vals = [
                 s.chofer, s.dni, s.tractor, s.trailer, s.tipo,
-                getattr(s.arenera, "username", ""), # Buscar por nombre de Arenera
+                getattr(s.arenera, "username", ""),
                 s.remito_arenera, 
                 s.final_remito
             ]
@@ -1243,8 +1139,6 @@ def transportista_history():
 @role_required("transportista")
 def transportista_export():
     u = db.session.get(User, session["user_id"])
-
-    # Fechas (con hora Argentina)
     today = get_arg_today()
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
@@ -1254,7 +1148,6 @@ def transportista_export():
             start_date = date.fromisoformat(start_str)
         else:
             start_date = today.replace(day=1)
-            
         if end_str:
             end_date = date.fromisoformat(end_str)
         else:
@@ -1263,7 +1156,6 @@ def transportista_export():
         start_date = today.replace(day=1)
         end_date   = today
 
-    # Query: Viajes del transportista (Incluye Join con Operador para saber quién cargó)
     rows = (db.session.query(Shipment)
             .outerjoin(User, Shipment.operador_id == User.id)
             .filter(
@@ -1274,107 +1166,66 @@ def transportista_export():
             .order_by(Shipment.date.desc(), Shipment.id.desc())
             .all())
 
-    # --- Generar Excel ---
     wb = Workbook()
     ws = wb.active
     ws.title = "Reporte Detallado"
 
-    # Encabezados Enriquecidos
     headers = [
         "ID", "Fecha Salida", "Fecha Llegada", "Arenera", 
         "Chofer", "DNI", "Patente Tractor", "Patente Batea", "Tipo",
         "Remito Origen", "Tn Origen", 
         "Remito Destino", "Tn Destino (Pagable)", 
-        "Merma Descontada (Tn)", # Nueva
-        "Precio Flete ($)",      # Nueva
-        "Total Neto ($)",        # Nueva
+        "Merma Descontada (Tn)", 
+        "Precio Flete ($)",      
+        "Total Neto ($)",        
         "Estado Viaje", "Estado Certificación"
     ]
     ws.append(headers)
 
-    # Config global para tolerancias (fallback)
     conf = get_config()
     tol_tn = conf.tolerance_kg / 1000.0
 
     for s in rows:
-        # 1. Determinar valores (Snapshot vs En Vivo)
         is_cert = (s.cert_status == "Certificado")
         
         if s.frozen_flete_neto is not None:
-            # --- DATOS CONGELADOS (HISTÓRICOS) ---
             precio_unit = s.frozen_flete_price or 0
             neto_viaje  = s.frozen_flete_neto or 0
             merma_plata = s.frozen_merma_money or 0
-            
-            # Reconstruimos la Tn de Merma para mostrarla
             tn_merma = 0.0
             if merma_plata > 0 and s.frozen_arena_price:
                 tn_merma = merma_plata / s.frozen_arena_price
-
-            # Reconstruimos el peso pagable
             peso_pagable = (neto_viaje + merma_plata) / (precio_unit if precio_unit else 1)
-            
             remito_final = s.final_remito
-            
         else:
-            # --- CÁLCULO EN VIVO (NO CERTIFICADO AÚN) ---
-            # Usamos los valores actuales de referencia
             precio_unit = u.custom_price or 0
-            
             loaded  = s.peso_neto_arenera or 0
             arrived = s.final_peso or s.sbe_peso_neto or 0
-            
             tn_merma = 0.0
             merma_plata = 0.0
-            
-            # Lógica de pago según Arenera
             if s.arenera.cert_type == 'salida':
                 peso_pagable = loaded
             else:
-                # Por llegada (con descuento merma)
                 diff = loaded - arrived
                 if diff > tol_tn:
                     tn_merma = diff - tol_tn
-                    # Estimamos la multa con precio actual
                     merma_plata = tn_merma * (s.arenera.custom_price or 0)
-                
                 peso_pagable = arrived - tn_merma
-            
             neto_viaje = (peso_pagable * precio_unit) - merma_plata
             remito_final = s.final_remito if is_cert else (s.sbe_remito or "")
 
-        # 2. Fechas
         f_salida = s.date.strftime("%d/%m/%Y")
         f_llegada = s.sbe_fecha_llegada.strftime("%d/%m/%Y") if s.sbe_fecha_llegada else ""
         
-        # 3. Escribir fila
         ws.append([
-            s.id,
-            f_salida,
-            f_llegada,
-            s.arenera.username if s.arenera else "",
-            
-            s.chofer,
-            s.dni,
-            s.tractor,
-            s.trailer,
-            s.tipo,
-            
-            s.remito_arenera or "",        
-            s.peso_neto_arenera or 0,     
-            
-            remito_final or "",                  
-            peso_pagable or 0,
-            
-            tn_merma if tn_merma > 0 else 0, # Merma
-            precio_unit,                     # Precio
-            neto_viaje,                      # Total $
-            
-            s.status,                      
-            s.cert_status or "Pendiente"
+            s.id, f_salida, f_llegada, s.arenera.username if s.arenera else "",
+            s.chofer, s.dni, s.tractor, s.trailer, s.tipo,
+            s.remito_arenera or "", s.peso_neto_arenera or 0,     
+            remito_final or "", peso_pagable or 0,
+            tn_merma if tn_merma > 0 else 0, precio_unit, neto_viaje,                      
+            s.status, s.cert_status or "Pendiente"
         ])
 
-    # Ajustar anchos de columna automáticamente
     for col in ws.columns:
         max_length = 0
         column = col[0].column_letter
@@ -1414,7 +1265,6 @@ def transportista_quotas():
         if q.arenera:
             by_date.setdefault(q.date, []).append(q)
 
-    # Totales disponibles por fecha (debe ir ANTES del return)
     totals_by_date = {}
     for d in week_dates:
         lst = by_date.get(d, [])
@@ -1433,18 +1283,14 @@ def transportista_quotas():
 @role_required("transportista")
 def transportista_arenera(arenera_id):
     u = db.session.get(User, session["user_id"])
-    
-    # Fecha
     date_str = request.args.get("date", get_arg_today().isoformat())
     try: dt = date.fromisoformat(date_str)
     except ValueError: dt = get_arg_today()
 
-    # Cupo
     q = Quota.query.filter_by(transportista_id=u.id, arenera_id=arenera_id, date=dt).first_or_404()
 
     if request.method == "POST":
         if "delete_id" in request.form:
-            # ... (Lógica de borrado igual que antes) ...
             sid = request.form.get("delete_id")
             s = Shipment.query.get(sid)
             if s and s.transportista_id==u.id and s.status=="En viaje" and s.date==dt:
@@ -1453,9 +1299,7 @@ def transportista_arenera(arenera_id):
                 db.session.commit()
                 flash("Viaje eliminado.", "success")
         else:
-            # CREAR VIAJE
             if (q.used or 0) < (q.limit or 0):
-                # Datos básicos del Formulario
                 chofer  = request.form.get("nombre_apellido", "").strip()
                 dni     = request.form.get("dni", "").strip()
                 gender  = request.form.get("gender", "M")
@@ -1475,10 +1319,8 @@ def transportista_arenera(arenera_id):
                         tipo=tipo,
                         tractor=tractor,
                         trailer=trailer,
-                        
-                        # ESTADO INICIAL CRÍTICO:
                         status="En viaje",
-                        peso_neto_arenera=None, # Sin peso aún -> "Yendo a Arenera"
+                        peso_neto_arenera=None,
                         cert_status="Pendiente"
                     )
                     db.session.add(new_ship)
@@ -1489,10 +1331,8 @@ def transportista_arenera(arenera_id):
                     flash("Faltan datos.", "error")
             else:
                 flash("Sin cupo disponible.", "error")
-        
         return redirect(url_for("transportista_arenera", arenera_id=arenera_id, date=dt.isoformat()))
 
-    # Listado
     shipments = Shipment.query.filter_by(transportista_id=u.id, arenera_id=arenera_id, date=dt).order_by(Shipment.id.desc()).all()
 
     return render_template(
@@ -1508,15 +1348,13 @@ def transportista_choferes():
     
     if request.method == "POST":
         action = request.form.get("action")
-        
-        # --- A. CREAR / ACTUALIZAR CHOFER ---
         if action == "save":
             dni = (request.form.get("dni") or "").strip()
             nombre = (request.form.get("nombre") or "").strip()
             tractor = (request.form.get("tractor") or "").strip().upper().replace(" ", "")
             trailer = (request.form.get("trailer") or "").strip().upper().replace(" ", "")
             gender = (request.form.get("gender") or "M").strip()
-            tipo = (request.form.get("tipo") or "").strip() # Asumiendo que agregaste 'tipo' al modelo Chofer
+            tipo = (request.form.get("tipo") or "").strip() 
             chofer_id = request.form.get("chofer_id", type=int)
 
             if not (dni and nombre):
@@ -1524,18 +1362,15 @@ def transportista_choferes():
                 return redirect(url_for("transportista_choferes"))
 
             if chofer_id:
-                # Editar Chofer existente
                 chofer = Chofer.query.filter_by(id=chofer_id, transportista_id=u_id).first()
                 if not chofer:
                     flash("Chofer no encontrado.", "error")
                     return redirect(url_for("transportista_choferes"))
             else:
-                # Crear nuevo Chofer - Validar unicidad global
                 exists = Chofer.query.filter_by(dni=dni).first()
                 if exists:
                     flash(f"Ya existe un chofer con DNI {dni} registrado.", "error")
                     return redirect(url_for("transportista_choferes"))
-                
                 chofer = Chofer(transportista_id=u_id, dni=dni)
             
             chofer.nombre = nombre
@@ -1548,57 +1383,36 @@ def transportista_choferes():
             db.session.commit()
             flash(f"Chofer {nombre} guardado exitosamente.", "success")
         
-        # --- B. ELIMINAR CHOFER ---
         elif action == "delete":
             chofer_id = request.form.get("chofer_id", type=int)
             chofer = Chofer.query.filter_by(id=chofer_id, transportista_id=u_id).first_or_404()
-            
             db.session.delete(chofer)
             db.session.commit()
             flash("Chofer eliminado.", "success")
 
         return redirect(url_for("transportista_choferes"))
     
-    # GET: Listar choferes (Serializando para Jinja y JS)
     choferes_raw = Chofer.query.filter_by(transportista_id=u_id).order_by(Chofer.nombre.asc()).all()
-    
     choferes = []
     for c in choferes_raw:
         choferes.append({
-            'id': c.id,
-            'nombre': c.nombre,
-            'dni': c.dni,
-            'gender': c.gender,
-            'tractor': c.tractor,
-            'trailer': c.trailer,
-            'tipo': c.tipo,
+            'id': c.id, 'nombre': c.nombre, 'dni': c.dni,
+            'gender': c.gender, 'tractor': c.tractor, 'trailer': c.trailer, 'tipo': c.tipo,
         })
-
     return render_template(tpl("transportista_choferes"), choferes=choferes)
-
-# --- Agregar en app.py, junto a las rutas del transportista ---
 
 @app.route("/api/choferes/mine")
 @login_required
 @role_required("transportista")
 def api_choferes_mine():
     u_id = session["user_id"]
-    
-    # Optimizamos, solo necesitamos los campos para el autocomplete
     choferes = db.session.query(Chofer).filter_by(transportista_id=u_id).all()
-    
     data = []
     for c in choferes:
         data.append({
-            'dni': c.dni,
-            'nombre': c.nombre,
-            'gender': c.gender,
-            'tractor': c.tractor,
-            'trailer': c.trailer,
-            'tipo': c.tipo,
+            'dni': c.dni, 'nombre': c.nombre, 'gender': c.gender,
+            'tractor': c.tractor, 'trailer': c.trailer, 'tipo': c.tipo,
         })
-    
-    # Flask ya sabe cómo devolver diccionarios como JSON
     return data
 
 @app.post("/transportista/shipment/<int:ship_id>/delete")
@@ -1623,34 +1437,24 @@ def delete_own_shipment(ship_id):
     flash("Viaje eliminado.", "success")
     return redirect(url_for("transportista_panel"))
 
-# ----------------------------
-# PANEL ARENERA
-# ----------------------------
-
 @app.route("/arenera")
 @login_required
 @role_required("arenera")
 def arenera_panel():
     u = db.session.get(User, session["user_id"])
-    
-    # 1. Obtener Familia
     fam = get_family_ids(session["user_id"])
     if not fam: 
         flash("Error de permisos.", "error")
         return redirect(url_for("login"))
     
-    # Filtros desde URL
     sh = request.args.get("search", "").strip().lower()
     trans_filter = request.args.get("trans_filter")
     
-    # 2. Query Base: SOLO MOSTRAR "En viaje" (Los que están yendo a buscar carga)
-    # Una vez cargados, pasan a "Salido a SBE" y salen de esta lista.
     q = Shipment.query.filter(
         Shipment.arenera_id.in_(fam),
         Shipment.status == "En viaje" 
     )
 
-    # Buscador de Texto
     if sh: 
         q = q.filter(
             func.lower(Shipment.chofer).like(f"%{sh}%") | 
@@ -1658,16 +1462,13 @@ def arenera_panel():
             func.lower(Shipment.tractor).like(f"%{sh}%")
         )
     
-    # Filtro de Transportista
     if trans_filter and trans_filter != "all":
         try:
             q = q.filter(Shipment.transportista_id == int(trans_filter))
         except ValueError: pass
 
-    # Orden: El más viejo arriba (FIFO)
     ships = q.order_by(Shipment.date.asc(), Shipment.id.asc()).all()
     
-    # Lista para selector de transportistas (solo los que tienen camiones viniendo)
     active_trans_ids = db.session.query(Shipment.transportista_id).filter(
         Shipment.arenera_id.in_(fam),
         Shipment.status == "En viaje"
@@ -1678,7 +1479,6 @@ def arenera_panel():
         t_ids = [r[0] for r in active_trans_ids]
         active_transports = User.query.filter(User.id.in_(t_ids)).order_by(User.username).all()
 
-    # Estadísticas Rápidas del día
     today = get_arg_today()
     stats = {
         "en_viaje": Shipment.query.filter(Shipment.arenera_id.in_(fam), Shipment.status=="En viaje", Shipment.date==today).count(),
@@ -1691,7 +1491,7 @@ def arenera_panel():
         tpl("arenera_panel"), 
         user=u, 
         shipments=ships, 
-        stats=stats,
+        stats=stats, 
         active_transports=active_transports
     )
 
@@ -1702,40 +1502,28 @@ def arenera_history():
     u = db.session.get(User, session["user_id"])
     fam = get_family_ids(session["user_id"])
 
-    # --- 1. Rango Inteligente de Fechas ---
-    # Busca la fecha min/max real de la DB para no ocultar viajes viejos por defecto
     min_db_date = db.session.query(func.min(Shipment.date)).filter(Shipment.arenera_id.in_(fam)).scalar() or get_arg_today()
     max_db_date = db.session.query(func.max(Shipment.date)).filter(Shipment.arenera_id.in_(fam)).scalar() or get_arg_today()
 
     start_str = request.args.get("start_date", "")
     end_str   = request.args.get("end_date", "")
     
-    # Si no elige fecha, mostramos TODO el historial disponible
     start_date = date.fromisoformat(start_str) if start_str else min_db_date
     end_date   = date.fromisoformat(end_str)   if end_str   else max_db_date
 
     if end_date < start_date:
         start_date, end_date = end_date, start_date
 
-    # --- 2. QUERY BASE ---
     base_q = Shipment.query.filter(
         Shipment.arenera_id.in_(fam),
         Shipment.date >= start_date,
         Shipment.date <= end_date
     )
 
-    # --- 3. CONTEOS (Chips) ---
     all_in_range = base_q.order_by(Shipment.date.desc(), Shipment.id.desc()).all()
     
-    counts = {
-        "total": len(all_in_range),
-        "en_viaje": 0,
-        "salido": 0,
-        "llegado": 0,
-        "certificado": 0
-    }
+    counts = { "total": len(all_in_range), "en_viaje": 0, "salido": 0, "llegado": 0, "certificado": 0 }
 
-    # Calculamos los totales excluyentes
     for s in all_in_range:
         if s.cert_status == 'Certificado':
             counts["certificado"] += 1
@@ -1746,20 +1534,18 @@ def arenera_history():
         else:
             counts["en_viaje"] += 1
 
-    # --- 4. APLICAR FILTROS ---
     final_q = base_q
     status = request.args.get("status", "")
     
     if status:
         if status == "Llegado a SBE":
-            # CORRECCIÓN AQUÍ: Que haya llegado PERO NO esté certificado
             final_q = final_q.filter(
                 (
                     (Shipment.status == "Llego") | 
                     (Shipment.status == "Llegado a SBE") |
                     (Shipment.sbe_fecha_llegada != None)
                 ),
-                (Shipment.cert_status != "Certificado") # <--- EXCLUSIÓN AGREGADA
+                (Shipment.cert_status != "Certificado")
             )
         elif status == "Salido a SBE":
             final_q = final_q.filter(
@@ -1779,7 +1565,6 @@ def arenera_history():
         else:
             final_q = final_q.filter(Shipment.status == status)
 
-    # --- 5. BUSCADOR ---
     search = request.args.get("search", "").strip().lower()
     if search:
         if search.isdigit():
@@ -1817,14 +1602,12 @@ def arenera_update(shipment_id):
     
     if s.arenera_id not in fam: abort(403)
     
-    # Seguridad absoluta: Si ya llegó a SBE o está certificado, NO SE TOCA.
     if s.cert_status == "Certificado" or s.status in ["Llego", "Llegado a SBE"]:
         flash("El viaje ya ha llegado a destino o está certificado. No se puede editar.", "error")
         return redirect(url_for("arenera_history"))
     
     action = request.form.get('action')
 
-    # --- ACCIÓN 1: CONFIRMAR SALIDA (Desde Panel) ---
     if action == "confirmar_salida":
         rem = request.form.get('remito_arenera', "").strip()
         peso = request.form.get('peso_neto_arenera', "").strip()
@@ -1833,7 +1616,6 @@ def arenera_update(shipment_id):
             flash("Faltan datos (Remito o Peso).", "error")
             return redirect(url_for("arenera_panel"))
         
-        # Validar Duplicados
         dup = Shipment.query.filter(
             Shipment.arenera_id.in_(fam), 
             Shipment.id != s.id, 
@@ -1852,28 +1634,22 @@ def arenera_update(shipment_id):
             return redirect(url_for("arenera_panel"))
             
         s.remito_arenera = rem
-        # CAMBIO DE ESTADO: Pasa a historial como "Salido a SBE"
         s.status = "Salido a SBE"
-        
-        # Limpieza por si acaso
         s.sbe_remito = None
         s.sbe_peso_neto = None
         s.cert_status = "Pendiente"
-        
         s.operador_id = session["user_id"]
         db.session.commit()
         flash("✅ Salida confirmada. El viaje pasó al Historial.", "success")
         return redirect(url_for("arenera_panel"))
 
-    # --- ACCIÓN 2: REVERTIR / CORREGIR (Desde Historial) ---
     elif action == "revertir":
-        # Solo permitimos revertir si está en "Salido a SBE"
         if s.status == "Salido a SBE":
             s.status = "En viaje"
             s.cert_status = "Pendiente"
             flash("Corrección habilitada: El viaje ha vuelto a Recepción.", "info")
             db.session.commit()
-            return redirect(url_for("arenera_panel")) # Lo mandamos al panel para que edite
+            return redirect(url_for("arenera_panel")) 
         else:
             flash("No se puede revertir este viaje.", "error")
             return redirect(url_for("arenera_history"))
@@ -1885,14 +1661,11 @@ def arenera_update(shipment_id):
 @role_required("arenera")
 def arenera_export():
     u = db.session.get(User, session["user_id"])
-    
-    # 1. Obtener Familia
     family_ids = get_family_ids(session["user_id"])
     if not family_ids:
         flash("Error identificando cuenta.", "error")
         return redirect(url_for("arenera_panel"))
 
-    # 2. Fechas
     today = get_arg_today()
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
@@ -1909,7 +1682,6 @@ def arenera_export():
     except ValueError:
         start_date, end_date = today, today
 
-    # 3. Query
     rows = (Shipment.query
             .filter(
                 Shipment.arenera_id.in_(family_ids),
@@ -1919,63 +1691,33 @@ def arenera_export():
             .order_by(Shipment.date.desc(), Shipment.id.desc())
             .all())
 
-    # --- Generar Excel ---
     wb = Workbook()
     ws = wb.active
     ws.title = "Reporte de Ventas"
 
-    # Encabezados Solicitados
-    headers = [
-        "ID", 
-        "Fecha Salida", 
-        "Remito", 
-        "Transportista", 
-        "Chofer", 
-        "DNI", 
-        "CUIL",             # Nueva
-        "Tn Despachadas", 
-        "Precio Unitario ($)", 
-        "Subtotal Ventas ($)",
-        "Estado", 
-        "Fecha Certificación"
-    ]
+    headers = ["ID", "Fecha Salida", "Remito", "Transportista", "Chofer", "DNI", "CUIL", "Tn Despachadas", "Precio Unitario ($)", "Subtotal Ventas ($)", "Estado", "Fecha Certificación"]
     ws.append(headers)
 
     for s in rows:
-        # Cálculo de Valores
         peso_pagable = s.peso_neto_arenera or 0
         
-        # Precio (Histórico vs Actual)
         if s.frozen_arena_price is not None:
             precio_unit = s.frozen_arena_price
         else:
             precio_unit = s.arenera.custom_price or 0
             
         total_venta = peso_pagable * precio_unit
-
-        # Fechas
         f_salida = s.date.strftime("%d/%m/%Y")
         f_certif = s.cert_fecha.strftime("%d/%m/%Y") if s.cert_fecha else "-"
-        
-        # Cálculo de CUIL (Usando tu función helper existente)
         cuil_str = calcular_cuil(s.dni, s.gender)
 
         ws.append([
-            s.id,
-            f_salida,
-            s.remito_arenera or "",
+            s.id, f_salida, s.remito_arenera or "",
             s.transportista.username if s.transportista else "",
-            s.chofer,
-            s.dni,
-            cuil_str,       # Columna CUIL
-            peso_pagable,   # Tn
-            precio_unit,    # $ Unit
-            total_venta,    # $ Total
-            s.cert_status if s.cert_status != "Pendiente" else s.status,
-            f_certif
+            s.chofer, s.dni, cuil_str, peso_pagable, precio_unit, total_venta,
+            s.cert_status if s.cert_status != "Pendiente" else s.status, f_certif
         ])
 
-    # Ajuste de ancho
     for col in ws.columns:
         max_length = 0
         column = col[0].column_letter
@@ -1989,69 +1731,138 @@ def arenera_export():
     bio = io.BytesIO()
     wb.save(bio)
     bio.seek(0)
-
     resp = make_response(bio.getvalue())
     resp.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     fname = f"Ventas_{u.username}_{start_date.strftime('%d%m')}-{end_date.strftime('%d%m')}.xlsx"
     resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
     return resp
 
+@app.post("/admin/dashboard_data")
 @app.get("/admin/export")
 @login_required
 @role_required("admin")
 def admin_export():
-    # Filtros opcionales ?start=YYYY-MM-DD&end=YYYY-MM-DD&status=...
+    # 1. Filtros opcionales
     start_str = (request.args.get("start") or "").strip()
     end_str   = (request.args.get("end") or "").strip()
     status    = (request.args.get("status") or "").strip()
 
     q = Shipment.query
+    
+    # Aplicar filtros de fecha si existen
     if start_str:
         try:
-            q = q.filter(Shipment.date >= date.fromisoformat(start_str))
-        except ValueError:
-            pass
+            start_date = date.fromisoformat(start_str)
+            q = q.filter(Shipment.date >= start_date)
+        except ValueError: pass
+    
     if end_str:
         try:
-            q = q.filter(Shipment.date <= date.fromisoformat(end_str))
-        except ValueError:
-            pass
+            end_date = date.fromisoformat(end_str)
+            q = q.filter(Shipment.date <= end_date)
+        except ValueError: pass
+
     if status:
         q = q.filter(Shipment.status == status)
 
-    rows = (q
-        .join(User, Shipment.transportista_id==User.id)
-        .add_columns(User.username.label("transportista"))
-        .all())
+    # Ordenar cronológicamente
+    q = q.order_by(Shipment.date.desc(), Shipment.id.desc())
+    
+    # Ejecutar consulta
+    rows = q.all()
 
-    # Construir XLSX
+    # 2. Crear Libro de Excel
     wb = Workbook()
     ws = wb.active
-    ws.title = "Historial"
-    headers = ["Fecha","Transportista","Arenera","Chofer","DNI","Tractor","Batea","Tipo","Estado"]
+    ws.title = "Historial Detallado"
+
+    # 3. Definir Encabezados Enriquecidos
+    headers = [
+        "ID Viaje",
+        "Fecha Salida (Arenera)",
+        "Fecha Llegada (SBE)",
+        "Arenera (Origen)",
+        "Transportista",
+        "Chofer",
+        "DNI Chofer",
+        "Patente Tractor (Decl)",
+        "Patente Batea (Decl)",
+        "Tipo Camión",
+        "Remito Origen",
+        "Peso Salida (Tn)",
+        "Remito Destino (SBE)",
+        "Peso Llegada SBE (Tn)",
+        "Estado Actual",
+        "Estado Certificación",
+        "Fecha Certificación",
+        "Observaciones"
+    ]
     ws.append(headers)
 
-    for s, transportista in rows:
-        arenera_name = s.arenera.username if s.arenera else ""
+    # 4. Rellenar Filas
+    for s in rows:
+        # Formato de Fechas
+        f_salida = s.date.strftime("%d/%m/%Y")
+        f_llegada = s.sbe_fecha_llegada.strftime("%d/%m/%Y %H:%M") if s.sbe_fecha_llegada else "-"
+        f_certif = s.cert_fecha.strftime("%d/%m/%Y") if s.cert_fecha else "-"
+
+        # Nombres de empresas (Manejo de nulos)
+        arenera_name = s.arenera.username if s.arenera else "N/A"
+        trans_name = s.transportista.username if s.transportista else "N/A"
+
+        # Pesos (Manejo de nulos)
+        peso_salida = s.peso_neto_arenera if s.peso_neto_arenera is not None else 0
+        peso_llegada = s.sbe_peso_neto if s.sbe_peso_neto is not None else 0
+        
+        # Remitos
+        remito_orig = s.remito_arenera or "-"
+        remito_dest = s.sbe_remito or "-" # Usamos sbe_remito o final_remito si prefieres lo certificado
+
         ws.append([
-            s.date.strftime("%Y-%m-%d"),
-            transportista,
+            s.id,
+            f_salida,
+            f_llegada,
             arenera_name,
+            trans_name,
             s.chofer,
             s.dni,
             s.tractor,
             s.trailer,
             s.tipo,
-            "Llegó" if s.status == "Llego" else s.status
+            remito_orig,
+            peso_salida,
+            remito_dest,
+            peso_llegada,
+            s.status,
+            s.cert_status,
+            f_certif,
+            s.observation_reason or ""
         ])
 
+    # 5. Ajuste Automático de Ancho de Columnas
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except: pass
+        adjusted_width = (max_length + 2)
+        # Límite máximo para que no queden columnas gigantes
+        if adjusted_width > 50: adjusted_width = 50
+        ws.column_dimensions[column].width = adjusted_width
+
+    # 6. Guardar en memoria y enviar
     bio = io.BytesIO()
     wb.save(bio)
     bio.seek(0)
+    
     resp = make_response(bio.getvalue())
     resp.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    fname = f"historial_{get_arg_now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    fname = f"Reporte_Admin_{get_arg_now().strftime('%Y%m%d_%H%M')}.xlsx"
     resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
+    
     return resp
 
 @app.route("/admin/config", methods=["GET", "POST"])
@@ -2059,14 +1870,10 @@ def admin_export():
 @role_required("admin")
 def admin_config():
     conf = get_config()
-    
     if request.method == "POST":
-        # Globales
         conf.tolerance_kg   = float(request.form.get("tolerance_kg", 0))
         conf.dispatch_price = float(request.form.get("dispatch_price", 0))
         
-        # Iterar campos dinámicos (Emails y Precios)
-        # Formato esperado: email_12, price_12
         for key, val in request.form.items():
             if "_" not in key: continue
             prefix, uid_str = key.split("_", 1)           
@@ -2078,10 +1885,9 @@ def admin_config():
                                     if prefix == "email": u.email = val.strip()
                                     elif prefix == "price": u.custom_price = float(val) if val else 0.0
                                     elif prefix == "certtype": u.cert_type = val
-                                    elif prefix == "paydays": u.payment_days = int(val) if val else 30 # <-- Nuevo
+                                    elif prefix == "paydays": u.payment_days = int(val) if val else 30
                             except ValueError:
                                 pass
-                    
         db.session.commit()
         flash("Configuracion actualizada.", "success")
         return redirect(url_for("admin_config"))
@@ -2089,12 +1895,7 @@ def admin_config():
     transportistas = User.query.filter_by(tipo="transportista").order_by(User.username).all()
     areneras       = User.query.filter_by(tipo="arenera").order_by(User.username).all()
     
-    return render_template(tpl("admin_config"), 
-                           conf=conf, 
-                           transportistas=transportistas, 
-                           areneras=areneras)
-
-# --- Modificar en app.py ---
+    return render_template(tpl("admin_config"), conf=conf, transportistas=transportistas, areneras=areneras)
 
 @app.route("/admin/resumen")
 @login_required
@@ -2105,8 +1906,6 @@ def admin_resumen():
     
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
-    
-    # Fecha Argentina
     today = get_arg_today()
     
     try:
@@ -2115,7 +1914,6 @@ def admin_resumen():
     except ValueError:
         start_date, end_date = today, today
 
-    # 1. Preparación de Estructuras (Columnas Fijas)
     all_trans_users = User.query.filter_by(tipo="transportista").order_by(User.username).all()
     all_trans_ids = set()
     trans_names   = {}
@@ -2124,14 +1922,12 @@ def admin_resumen():
         all_trans_ids.add(t.id)
         trans_names[t.id] = t.username
 
-    # Query: Solo Certificados en el rango
     rows = (Shipment.query
             .filter(Shipment.cert_status == "Certificado")
             .filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date)
             .order_by(Shipment.cert_fecha.asc())
             .all())
     
-    # Definimos las 6 matrices
     mat_neto_cert = {}  
     mat_iva_pay   = {}  
     mat_tn_out    = {}  
@@ -2141,7 +1937,6 @@ def admin_resumen():
 
     for s in rows:
         tid = s.transportista_id
-        
         if tid not in all_trans_ids:
             all_trans_ids.add(tid)
             trans_names[tid] = s.transportista.username
@@ -2149,18 +1944,15 @@ def admin_resumen():
         loaded  = s.peso_neto_arenera or 0
         arrived = s.final_peso or 0
         
-        # --- LÓGICA HÍBRIDA: CONGELADO vs LEGADO ---
         if s.frozen_flete_neto is not None:
             neto = s.frozen_flete_neto
             iva  = s.frozen_flete_iva
-            
             diff_tn_visual = 0
             if s.frozen_merma_money > 0 and (s.frozen_arena_price or 0) > 0:
                 diff_tn_visual = s.frozen_merma_money / s.frozen_arena_price
             elif s.frozen_merma_money == 0:
                  diff_tn_visual = 0 
         else:
-            # Fallback cálculo al vuelo
             price_flete = s.transportista.custom_price or 0
             price_arena = s.arenera.custom_price or 0
             diff = loaded - arrived
@@ -2178,12 +1970,10 @@ def admin_resumen():
             neto = (payable * price_flete) - merma_money
             iva  = max(0, neto * 1.21)
 
-        # Fechas
         d_cert = s.cert_fecha or s.date
         days = s.transportista.payment_days or 30
         d_pago = d_cert + timedelta(days=days)
         
-        # Helper de llenado
         def add_val(mat, d, t, v):
             if d not in mat: mat[d] = {}
             mat[d][t] = mat[d].get(t, 0) + v
@@ -2195,34 +1985,25 @@ def admin_resumen():
         add_val(mat_tn_diff,   d_cert, tid, diff_tn_visual)
         add_val(mat_trucks,    d_cert, tid, 1)
 
-    # --- PROCESAMIENTO FINAL ---
     sorted_trans_ids = sorted(list(all_trans_ids), key=lambda x: trans_names[x])
     
-    # Función interna para procesar la matriz
     def process_matrix_data(matrix_dict):
         sorted_dates = sorted(matrix_dict.keys())
         result_rows = []
-        
-        # Inicializamos acumuladores
         totals_by_col = {tid: 0.0 for tid in sorted_trans_ids}
-        grand_total_sum = 0.0 # <--- AQUÍ SE INICIALIZA LA VARIABLE QUE DABA ERROR
+        grand_total_sum = 0.0 
 
         for d in sorted_dates:
-            # Creamos el objeto fila (IMPORTANTE: usar "row_total" como pide el HTML)
             row_data = {"date": d, "cells": [], "row_total": 0.0}
-            
             for tid in sorted_trans_ids:
                 val = matrix_dict[d].get(tid, 0.0)
                 row_data["cells"].append(val)
                 row_data["row_total"] += val
                 totals_by_col[tid] += val
-            
             grand_total_sum += row_data["row_total"]
             result_rows.append(row_data)
-            
         return result_rows, totals_by_col, grand_total_sum
 
-    # Generar las 6 tablas usando la función corregida
     t1, c1, g1 = process_matrix_data(mat_neto_cert)
     t2, c2, g2 = process_matrix_data(mat_iva_pay)
     t3, c3, g3 = process_matrix_data(mat_tn_out)
@@ -2251,7 +2032,6 @@ def admin_control_arena():
     aid = request.args.get("arenera_id")
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
-    
     today = get_arg_today()
     
     if not start_str:
@@ -2266,7 +2046,6 @@ def admin_control_arena():
             start_date = end_date = today
 
     areneras = User.query.filter_by(tipo="arenera", parent_id=None).order_by(User.username).all()
-    
     shipments = []
     total_tn = 0.0
     total_money = 0.0
@@ -2274,8 +2053,6 @@ def admin_control_arena():
 
     if aid and aid != "none":
         selected_arenera = User.query.get(int(aid))
-        
-        # Traemos solo lo CERTIFICADO (es decir, lo que llegó y validaste)
         q = (Shipment.query
              .filter(Shipment.arenera_id == int(aid))
              .filter(Shipment.cert_status == "Certificado")
@@ -2285,21 +2062,11 @@ def admin_control_arena():
         shipments = q.all()
         
         for s in shipments:
-            # LÓGICA CORREGIDA:
-            # A la arenera SIEMPRE se le paga lo que dice su Remito de Salida (peso_neto_arenera).
-            # La validación de si llegó o no, ya está hecha (por eso está Certificado).
-            # No usamos el peso SBE para pagarle a la arenera.
-            
             peso = s.peso_neto_arenera or 0
-            
-            # Precio congelado o actual
             precio = s.frozen_arena_price if s.frozen_arena_price is not None else (s.arenera.custom_price or 0)
-            
             monto = peso * precio
-            
             total_tn += peso
             total_money += monto
-            
             s._calc_precio = precio
             s._calc_total_arena = monto
 
@@ -2319,7 +2086,6 @@ def admin_control_flete():
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
     date_mode = request.args.get("mode", "cert") 
-    
     today = get_arg_today()
     
     if not start_str:
@@ -2332,7 +2098,6 @@ def admin_control_flete():
             start_date = end_date = today
 
     transportistas = User.query.filter_by(tipo="transportista").order_by(User.username).all()
-    
     shipments = []
     total_tn = 0.0
     total_neto = 0.0
@@ -2342,44 +2107,31 @@ def admin_control_flete():
 
     if tid and tid != "none":
         selected_trans = User.query.get(int(tid))
-        
         q = Shipment.query.filter(
             Shipment.transportista_id == int(tid),
             Shipment.cert_status == "Certificado"
         )
-        
         if date_mode == 'travel':
             q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
         else:
             q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
-            
-        shipments = q.all()
         
+        shipments = q.all()
         conf = get_config()
         tol_tn = conf.tolerance_kg / 1000.0
         
         for s in shipments:
-            # 1. Obtener Valores (Snapshot o Cálculo)
             if s.frozen_flete_neto is not None:
-                # Datos Congelados
                 precio_flete = s.frozen_flete_price or 0
                 merma_money  = s.frozen_merma_money or 0
                 neto         = s.frozen_flete_neto or 0
-                
-                # CORRECCIÓN HISTÓRICA: 
-                # Si el valor congelado de IVA era el total por error, lo recalculamos bien para mostrarlo.
-                # Si tu DB ya tiene datos mal guardados, esto lo arregla visualmente:
                 iva_monto = neto * 0.21
-                
             else:
-                # Datos Calculados (Fallback)
                 loaded  = s.peso_neto_arenera or 0
                 arrived = s.final_peso or 0
                 precio_flete = s.transportista.custom_price or 0
                 precio_arena = s.arenera.custom_price or 0
-                
                 tn_base = loaded if s.arenera.cert_type == 'salida' else arrived
-                
                 merma_money = 0.0
                 if s.arenera.cert_type != 'salida':
                     diff = loaded - arrived
@@ -2387,25 +2139,16 @@ def admin_control_flete():
                         merma_money = (diff - tol_tn) * precio_arena
 
                 neto = (tn_base * precio_flete) - merma_money
-                
-                # CORRECCIÓN MATEMÁTICA AQUÍ:
-                # El IVA es el 21% del neto (0.21), no el 121% (1.21)
                 iva_monto = max(0, neto * 0.21)
 
-            # Acumuladores
             total_tn   += (s.final_peso or 0)
             total_neto += neto
             total_iva  += iva_monto
-            
-            # Datos para la vista
             s._calc_price = precio_flete
             s._calc_merma = merma_money
             s._calc_neto  = neto
-            
-            # El total de la fila es Neto + IVA
             s._calc_total = neto + iva_monto
 
-    # Total Final General
     total_final = total_neto + total_iva
 
     return render_template(tpl("admin_control_flete"),
@@ -2436,7 +2179,6 @@ def sync_sbe():
 @login_required
 @role_required("admin", "gestion")
 def generate_pdf():
-    # Llama al motor
     pdf_bytes, fname, error = _create_pdf_internal(
         request.args.get("target_id"),
         request.args.get("type"),
@@ -2444,22 +2186,16 @@ def generate_pdf():
         request.args.get("end"),
         request.args.get("mode", "cert")
     )
-    
     if error:
         flash(error, "error")
         return redirect(request.referrer or url_for('admin_panel'))
-        
     response = make_response(pdf_bytes)
     response.headers['Content-Type'] = 'application/pdf'
-    # 'inline' para verlo en el navegador, 'attachment' para bajarlo directo
     response.headers['Content-Disposition'] = f'inline; filename={fname}'
     return response
 
 def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
-    """Helper interno: Genera los bytes del PDF y el nombre del archivo."""
     from xhtml2pdf import pisa
-    
-    # 1. Fechas
     today = get_arg_today()
     try:
         start_date = date.fromisoformat(start_str)
@@ -2467,7 +2203,6 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     except (ValueError, TypeError):
         start_date = end_date = today
 
-    # 2. Query
     target_user = User.query.get(int(target_id))
     if not target_user: return None, None, "Usuario no encontrado"
 
@@ -2486,7 +2221,6 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     shipments = q.all()
     if not shipments: return None, None, "No hay datos certificados."
 
-    # 3. Cálculos
     total_tn = 0.0
     subtotal = 0.0
     descuento_dinero = 0.0
@@ -2496,7 +2230,6 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     ref_price = target_user.custom_price or 0
 
     for s in shipments:
-        # Lógica Híbrida (Snapshot vs Fallback)
         if s.frozen_flete_neto is not None:
             precio_unit = s.frozen_flete_price if target_type == 'transportista' else s.frozen_arena_price
             if target_type == 'transportista':
@@ -2508,7 +2241,6 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
                 neto_linea = peso_pagable * (precio_unit or 0)
                 merma_linea = 0
         else:
-            # Fallback simplificado
             precio_unit = ref_price
             merma_linea = 0
             peso_pagable = s.final_peso if target_type=='transportista' else s.peso_neto_arenera
@@ -2517,7 +2249,6 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
         total_tn += peso_pagable
         subtotal += (neto_linea + merma_linea)
         descuento_dinero += merma_linea
-        
         if merma_linea > 0 and precio_unit:
              tn_merma += (merma_linea / precio_unit)
 
@@ -2535,7 +2266,6 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     total_neto = subtotal - descuento_dinero
     total_iva_inc = total_neto * 1.21
 
-    # 4. Renderizado
     html = render_template(
         "pdf_template.html",
         target_id=target_user.id,
@@ -2556,9 +2286,7 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
 
     pdf_io = io.BytesIO()
     pisa_status = pisa.CreatePDF(io.StringIO(html), dest=pdf_io)
-
     if pisa_status.err: return None, None, f"Error PDF: {pisa_status.err}"
-
     pdf_io.seek(0)
     fname = f"Certif_{target_user.username}_{start_date.strftime('%d%m')}.pdf"
     
@@ -2575,21 +2303,17 @@ def preview_send():
     mode        = request.args.get("mode", "cert")
 
     target_user = User.query.get_or_404(int(target_id))
-    
-    # Generamos la URL para que el iframe muestre el PDF
     pdf_src = url_for('generate_pdf', target_id=target_id, type=target_type, start=start, end=end, mode=mode)
     
     return render_template(tpl("admin_preview_send"), 
                            user=target_user, 
                            pdf_url=pdf_src,
-                           # Pasamos los datos para el form oculto
                            target_id=target_id, target_type=target_type, start=start, end=end, mode=mode)
 
 @app.post("/admin/send_email_action")
 @login_required
 @role_required("admin")
 def send_email_action():
-    # 1. Recuperar parámetros del formulario
     target_id = request.form.get("target_id")
     target_type = request.form.get("target_type")
     start = request.form.get("start")
@@ -2604,17 +2328,11 @@ def send_email_action():
         flash("El destinatario no tiene email configurado.", "error")
         return redirect(request.referrer)
 
-    # 2. Generar el PDF en memoria (Bytes)
-    # Llamamos a nuestro motor interno
-    pdf_bytes, fname, error = _create_pdf_internal(
-        target_id, target_type, start, end, mode
-    )
-    
+    pdf_bytes, fname, error = _create_pdf_internal(target_id, target_type, start, end, mode)
     if error or not pdf_bytes:
         flash(f"Error generando el PDF: {error}", "error")
         return redirect(request.referrer)
 
-    # 3. Enviar Email vía Microsoft Graph
     try:
         send_email_graph(
             destinatario=email_dest,
@@ -2624,13 +2342,10 @@ def send_email_action():
             attachment_name=fname
         )
         flash(f"✅ Liquidación enviada correctamente a {email_dest} (vía Microsoft)", "success")
-        
     except Exception as e:
-        # Loguear error en consola para debug
         print(f"Error enviando mail: {e}")
         flash(f"❌ Error enviando correo: {e}", "error")
 
-    # 4. Volver al panel correspondiente
     if target_type == 'transportista':
         return redirect(url_for('admin_control_flete', transportista_id=target_id, start=start, end=end, mode=mode))
     else:
@@ -2639,9 +2354,7 @@ def send_email_action():
 # -----------------------------------------------------------
 # MICROSOFT GRAPH MAIL SERVICE
 # -----------------------------------------------------------
-
 def get_graph_token_mail():
-    """Obtiene token para enviar correos (Scope .default incluye Mail.Send)"""
     tenant_id = os.getenv("GRAPH_TENANT_ID")
     client_id = os.getenv("GRAPH_CLIENT_ID")
     secret    = os.getenv("GRAPH_CLIENT_SECRET")
@@ -2663,7 +2376,6 @@ def get_graph_token_mail():
         return None
 
 def send_email_graph(destinatario, asunto, cuerpo, attachment_bytes=None, attachment_name="documento.pdf"):
-    """Envía correo con adjunto opcional usando Microsoft Graph API"""
     token = get_graph_token_mail()
     if not token:
         raise Exception("No se pudo obtener el token de Microsoft Graph.")
@@ -2676,23 +2388,17 @@ def send_email_graph(destinatario, asunto, cuerpo, attachment_bytes=None, attach
         "Content-Type": "application/json"
     }
 
-    # Estructura base del mensaje
     message_payload = {
         "subject": asunto,
         "body": {
-            "contentType": "HTML", # O "Text"
-            "content": cuerpo.replace("\n", "<br>") # Convertir saltos de línea a HTML
+            "contentType": "HTML", 
+            "content": cuerpo.replace("\n", "<br>") 
         },
-        "toRecipients": [
-            {"emailAddress": {"address": destinatario}}
-        ]
+        "toRecipients": [{"emailAddress": {"address": destinatario}}]
     }
 
-    # Agregar adjunto si existe
     if attachment_bytes:
-        # Graph requiere el archivo en Base64 string
         b64_content = base64.b64encode(attachment_bytes).decode("utf-8")
-        
         message_payload["attachments"] = [
             {
                 "@odata.type": "#microsoft.graph.fileAttachment",
@@ -2703,17 +2409,12 @@ def send_email_graph(destinatario, asunto, cuerpo, attachment_bytes=None, attach
         ]
 
     payload = {"message": message_payload, "saveToSentItems": "true"}
-
     resp = requests.post(url, headers=headers, json=payload)
     
     if not resp.ok:
         raise Exception(f"Error Graph API: {resp.status_code} - {resp.text}")
-        
     return True
 
-# ----------------------------
-# MAIN
-# ----------------------------
 if __name__ == "__main__":
     app.run(host=os.getenv("FLASK_HOST", "0.0.0.0"),
             port=int(os.getenv("FLASK_PORT", "5000")),

@@ -127,6 +127,7 @@
                 </div>
                 <div class="p-4">
                     <form action="" method="POST">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
                             <label class="form-label-sm">Arenera</label>
                             <select name="arenera" class="form-select" required>

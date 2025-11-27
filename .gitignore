@@ -15,4 +15,5 @@ camiones.db
 *.sqlite3
 docker-compose.yml
 pgdata-dev/
+app2.py
 # logearse: gh auth login

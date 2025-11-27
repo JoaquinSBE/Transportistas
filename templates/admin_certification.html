@@ -87,6 +87,15 @@
     .st-observado { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
     .st-certificado { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
 
+    /* Estilo para las fechas detalladas (Compacto) */
+    .date-compact-box { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 0.8rem; }
+    .date-val-main { font-weight: 700; color: #0f172a; }
+    .date-val-cert { font-weight: 700; color: #16a34a; background: #dcfce7; padding: 1px 5px; border-radius: 4px; font-size: 0.75rem; }
+    
+    .logistics-box { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 6px; font-size: 0.7rem; color: #64748b; }
+    .logistics-row { display: flex; justify-content: space-between; align-items: center; }
+    .logistics-row:not(:last-child) { margin-bottom: 2px; padding-bottom: 2px; border-bottom: 1px dashed #e2e8f0; }
+
     /* Tabs Navigation */
     .nav-pills .nav-link {
       color: #64748b;
@@ -138,6 +147,7 @@
         </ul>
 
         <form class="d-flex gap-2 flex-wrap" method="GET" action="{{ url_for('admin_certificacion') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="view" value="{{ view_mode }}">
             
             <select name="transportista_id" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
@@ -168,7 +178,7 @@
           <thead>
             <tr>
               <th style="width: 100px;">Estado</th>
-              <th>ID / Fechas</th>
+              <th style="min-width: 170px;">Fechas (Viaje / Logística)</th>
               <th>Transporte</th>
               <th>Patentes</th>
               
@@ -195,6 +205,7 @@
             {% for s in shipments %}
             <tr class="{{ 'bg-warning-subtle' if s.cert_status == 'Observado' else '' }}">
               
+              <!-- ESTADO -->
               <td>
                 <span class="badge-status st-{{ s.cert_status|lower|replace(' ','-') }}">
                   {{ s.cert_status }}
@@ -204,17 +215,51 @@
                         <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ s.observation_reason }}
                     </div>
                 {% endif %}
+                <div class="text-muted mt-2 small">ID: <strong>#{{ s.id }}</strong></div>
               </td>
 
+              <!-- FECHAS DETALLADAS (COMPACTO) -->
               <td>
-                <div class="fw-bold text-dark">#{{ s.id }}</div>
-                <div class="text-muted small" title="Salida / Llegada">
-                    {{ s.date.strftime('%d/%m') }} 
-                    <i class="fa-solid fa-arrow-right mx-1 text-xs"></i> 
-                    {{ s.sbe_fecha_salida.strftime('%d/%m') if s.sbe_fecha_salida else '?' }}
+                <!-- Línea Superior: Viaje vs Certificación -->
+                <div class="date-compact-box">
+                    <div title="Fecha declarada del viaje">
+                        <i class="fa-regular fa-calendar text-primary me-1"></i>
+                        <span class="date-val-main">{{ s.date.strftime('%d/%m') }}</span>
+                    </div>
+                    {% if s.cert_fecha %}
+                    <div title="Fecha de Aprobación">
+                        <span class="date-val-cert">
+                            <i class="fa-solid fa-check me-1"></i>{{ s.cert_fecha.strftime('%d/%m') }}
+                        </span>
+                    </div>
+                    {% endif %}
                 </div>
+
+                <!-- Bloque Inferior: Logística SBE -->
+                {% if s.sbe_fecha_salida or s.sbe_fecha_llegada %}
+                <div class="logistics-box">
+                    {% if s.sbe_fecha_salida %}
+                    <div class="logistics-row" title="Salida Real Arenera">
+                        <span><i class="fa-solid fa-truck-ramp-box me-1 text-xs"></i>Sal</span>
+                        <strong>{{ s.sbe_fecha_salida.strftime('%d/%m %H:%M') }}</strong>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="logistics-row" title="Llegada Real Planta">
+                        <span><i class="fa-solid fa-flag-checkered me-1 text-xs"></i>Lleg</span>
+                        {% if s.sbe_fecha_llegada %}
+                            <strong>{{ s.sbe_fecha_llegada.strftime('%d/%m %H:%M') }}</strong>
+                        {% else %}
+                            <span class="fst-italic opacity-50">--:--</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% else %}
+                    <div class="text-xs text-muted opacity-50 mt-1 fst-italic">En tránsito / Sin datos SBE</div>
+                {% endif %}
               </td>
 
+              <!-- TRANSPORTE -->
               <td>
                 <div class="text-dark fw-medium">{{ s.transportista.username }}</div>
                 <div class="text-secondary" style="font-size:0.75rem;">
@@ -222,6 +267,7 @@
                 </div>
               </td>
 
+              <!-- PATENTES -->
               <td>
                 <div class="d-flex flex-column">
                     <span class="text-xs text-muted">Decl: <strong class="text-dark">{{ s.tractor }}</strong></span>
@@ -238,9 +284,11 @@
                 </div>
               </td>
 
+              <!-- DATOS ARENERA -->
               <td class="bg-group-arenera text-center font-monospace">{{ s.remito_arenera or '-' }}</td>
               <td class="bg-group-arenera text-center font-monospace fw-bold">{{ s.peso_neto_arenera or '-' }}</td>
 
+              <!-- DATOS SBE -->
               <td class="bg-group-sbe p-1" colspan="2">
                 {% if s.cert_status == 'Certificado' %}
                     <div class="d-flex justify-content-around fw-bold text-primary">
@@ -249,6 +297,7 @@
                     </div>
                 {% else %}
                     <form action="{{ url_for('corregir_sbe', shipment_id=s.id) }}" method="POST" class="d-flex gap-1 justify-content-center align-items-center">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <input type="text" name="sbe_remito" value="{{ s.sbe_remito or '' }}" class="form-control input-manual text-center" placeholder="Remito" style="width: 80px;">
                         <input type="text" name="sbe_peso" value="{{ s.sbe_peso_neto or '' }}" class="form-control input-manual text-center" placeholder="Tn" style="width: 60px;">
                         
@@ -265,6 +314,7 @@
                 {% endif %}
               </td>
 
+              <!-- ACCIÓN -->
               <td class="text-end pe-4">
                 {% if s.cert_status == 'Certificado' %}
                     <span class="badge bg-success-subtle text-success border border-success-subtle">
@@ -272,6 +322,7 @@
                     </span>
                 {% elif (s.cert_status in ['Pre-Aprobado', 'Observado'] or s.sbe_manual_override) %}
                     <form action="{{ url_for('certify_shipment', shipment_id=s.id) }}" method="POST">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <button class="btn btn-primary btn-sm py-1 px-3 shadow-sm" type="submit">
                             Certificar
                         </button>

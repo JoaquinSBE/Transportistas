@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="es" data-bs-theme="light">
 <head>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard Operativo</title>
@@ -250,9 +251,17 @@
       btnRefresh.disabled = true;
 
       try {
+        // --- AQUÍ ESTÁ EL CAMBIO DE SEGURIDAD ---
+        
+        // 1. Leer el token de la etiqueta <meta>
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
         const res = await fetch('{{ url_for("admin_dashboard_data") }}', {
           method: 'POST', 
-          headers: {'Content-Type': 'application/json'}, 
+          headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken  // 2. Enviarlo en los headers
+          }, 
           body: JSON.stringify({
             range: rangeSelect.value,
             arenera_id: document.getElementById('arenera_id').value,

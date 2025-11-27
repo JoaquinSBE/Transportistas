@@ -117,6 +117,7 @@
     
     <div class="card-custom p-4">
       <form method="get" action="{{ url_for('todos_camiones') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="row g-3 align-items-end">
           
           <div class="col-md-2">

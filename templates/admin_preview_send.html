@@ -28,6 +28,7 @@
         <h5 class="mb-3">Detalles del Envío</h5>
         
         <form action="{{ url_for('send_email_action') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="target_id" value="{{ target_id }}">
             <input type="hidden" name="target_type" value="{{ target_type }}">
             <input type="hidden" name="start" value="{{ start }}">

@@ -133,6 +133,7 @@
   <div class="container-xl">
     
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         
         <div class="card-custom">
             <div class="card-header-custom">

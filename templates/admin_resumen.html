@@ -178,6 +178,7 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3">
             <form class="row g-3 align-items-end">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="col-md-auto">
                     <label class="form-label small text-muted fw-bold text-uppercase mb-1">Desde</label>
                     <input type="date" name="start" class="form-control form-control-sm" value="{{ start }}">

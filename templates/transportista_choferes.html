@@ -138,6 +138,7 @@
       <div class="form-header"><i class="fa-solid fa-user-plus me-2 text-primary"></i>Registrar Chofer</div>
       
       <form method="post" action="{{ url_for('transportista_choferes') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <input type="hidden" name="action" value="save">
         
         <div class="row g-3 mb-3">
@@ -222,6 +223,7 @@
                 </button>
                 
                 <form method="post" action="{{ url_for('transportista_choferes') }}" onsubmit="return confirm('¿Eliminar a {{ c.nombre }}?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="chofer_id" value="{{ c.id }}">
                     <button type="submit" class="btn-icon-light btn-delete">
@@ -262,6 +264,7 @@
         <div class="modal-body">
           
           <form method="post" action="{{ url_for('transportista_choferes') }}" id="editForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="action" value="save">
             <input type="hidden" name="chofer_id" id="modal-chofer-id">
             
