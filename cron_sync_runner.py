@@ -1,6 +1,7 @@
 # cron_sync_runner.py
 import os
 from app import app, db, Shipment # Importamos los elementos necesarios de la app principal
+from datetime import datetime
 from sync_service import run_sbe_sync
 
 if __name__ == "__main__":
