@@ -15,7 +15,6 @@ import threading
 import time
 from zoneinfo import ZoneInfo
 from xhtml2pdf import pisa
-from flask_mail import Mail, Message
 from flask_wtf.csrf import CSRFProtect  # Protección CSRF
 
 # ----------------------------
