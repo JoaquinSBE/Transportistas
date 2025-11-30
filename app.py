@@ -1010,31 +1010,54 @@ def corregir_sbe(shipment_id):
 @login_required
 @role_required("transportista")
 def transportista_panel():
-    u   = User.query.get(session["user_id"])
+    u   = db.session.get(User, session["user_id"])
     hoy = get_arg_today()
 
     week_start = hoy - timedelta(days=hoy.weekday())
+    week_end   = week_start + timedelta(days=6)
     next_monday = week_start + timedelta(days=7)
 
+    # CORRECCIÓN KPI: Sumamos "En viaje", "Salió" y "Salido a SBE"
+    # Básicamente todo lo que NO sea "Llego" ni esté Certificado.
     en_viaje_total = (Shipment.query
-        .filter_by(transportista_id=u.id, status="En viaje")
+        .filter(
+            Shipment.transportista_id == u.id,
+            Shipment.status.in_(["En viaje", "Salió", "Salido a SBE", "En Viaje"]) # Agregamos variantes para asegurar
+        )
         .count())
 
     llegados_semana = (Shipment.query
         .filter(
             Shipment.transportista_id == u.id,
-            Shipment.status == "Llego",
+            Shipment.status == "Llego", # O status que signifique finalizado
             Shipment.date >= week_start,
             Shipment.date <  next_monday
         ).count())
     
     choferes_list = Chofer.query.filter_by(transportista_id=u.id).all() 
 
+    # Cálculo de Cupos (Igual que antes)
+    q_stats = db.session.query(
+        func.sum(Quota.limit).label('total'),
+        func.sum(Quota.used).label('used')
+    ).filter(
+        Quota.transportista_id == u.id,
+        Quota.date >= week_start,
+        Quota.date <= week_end
+    ).first()
+
+    q_limit = q_stats.total or 0
+    q_used  = q_stats.used or 0
+    q_remaining = max(0, q_limit - q_used)
+
     stats = {
         "en_viaje":   en_viaje_total,
         "llegados":   llegados_semana,
         "week_from":  week_start,
-        "week_to":    next_monday - timedelta(days=1),
+        "week_to":    week_end,
+        "link_choferes": url_for("transportista_choferes"),
+        "cupo_restante": q_remaining,
+        "cupo_total": q_limit
     }
 
     envios = (Shipment.query
