@@ -352,7 +352,7 @@
       {% endwith %}
     });
 
-    // Validar peso "Raro" (<25 o >35 Tn)
+    // Validar peso "Raro" (<25 o >37 Tn)
     function validateWeight(event, form) {
         const weightInput = form.querySelector('input[name="peso_neto_arenera"]');
         
@@ -362,7 +362,7 @@
         const weight = parseFloat(weightInput.value);
         if (isNaN(weight)) return true; // Backend validará
 
-        if (weight < 25 || weight > 35) {
+        if (weight < 25 || weight > 37) {
             event.preventDefault(); // Detener envío
             
             Swal.fire({
