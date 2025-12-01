@@ -147,6 +147,8 @@ def run_sbe_sync(db, Shipment):
 
     pendientes = db.session.query(Shipment).filter(
         Shipment.cert_status != 'Certificado',
+        Shipment.remito_arenera != None, 
+        Shipment.remito_arenera != "",
         Shipment.status.in_(['En viaje', 'Salió', 'Llego'])
     ).all()
 
