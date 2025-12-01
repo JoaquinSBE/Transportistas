@@ -190,6 +190,7 @@
                     <thead>
                         <tr>
                             <th style="width: 50px;">ID</th>
+                            <th style="width: 90px;">Fecha</th>
                             <th style="width: 20%;">Chofer</th>
                             <th style="width: 15%;">Patente</th>
                             <th style="width: 20%;">Transportista</th>
@@ -202,6 +203,7 @@
                         {% for s in shipments %}
                         <tr>
                             <td class="fw-bold text-muted">#{{ s.id }}</td>
+                            <td class="text-muted fw-bold">{{ s.date.strftime('%d/%m/%Y') }}</td>
                             <td>
                                 <div class="fw-bold text-dark">{{ s.chofer }}</div>
                                 <div class="small text-muted" style="font-size:0.75rem;">DNI: {{ s.dni }}</div>
@@ -246,7 +248,7 @@
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="7" class="text-center py-5 text-muted">No hay camiones en espera.</td></tr>
+                        <tr><td colspan="8" class="text-center py-5 text-muted">No hay camiones en espera.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -261,6 +263,7 @@
                 
                 <div class="mob-head">
                     <div>
+                        <div class="small text-primary fw-bold mb-1">#{{ s.id }} • {{ s.date.strftime('%d/%m') }}</div>
                         <div class="mob-title">{{ s.chofer }}</div>
                         <div class="mob-sub">
                             {{ s.transportista.username }} • <span class="font-monospace text-dark">{{ s.tractor }}</span>
