@@ -16,4 +16,5 @@ camiones.db
 docker-compose.yml
 pgdata-dev/
 app2.py
+fix_remitos_viejos.py
 # logearse: gh auth login

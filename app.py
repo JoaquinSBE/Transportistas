@@ -1622,8 +1622,10 @@ def arenera_update(shipment_id):
     s = Shipment.query.get_or_404(shipment_id)
     fam = get_family_ids(session["user_id"])
     
+    # Verificación de seguridad: ¿Es su carga?
     if s.arenera_id not in fam: abort(403)
     
+    # Verificación de estado: Si ya llegó o se certificó, no se toca.
     if s.cert_status == "Certificado" or s.status in ["Llego", "Llegado a SBE"]:
         flash("El viaje ya ha llegado a destino o está certificado. No se puede editar.", "error")
         return redirect(url_for("arenera_history"))
@@ -1631,38 +1633,55 @@ def arenera_update(shipment_id):
     action = request.form.get('action')
 
     if action == "confirmar_salida":
-        rem = request.form.get('remito_arenera', "").strip()
-        peso = request.form.get('peso_neto_arenera', "").strip()
+        rem_raw = request.form.get('remito_arenera', "").strip()
+        peso_raw = request.form.get('peso_neto_arenera', "").strip()
 
-        if not rem or not peso: 
-            flash("Faltan datos (Remito o Peso).", "error")
+        # --- NORMALIZACIÓN DE REMITO ---
+        # 1. Si tiene guion (0001-12345), nos quedamos con lo de la derecha (12345)
+        if '-' in rem_raw:
+            parts = rem_raw.split('-')
+            number_part = parts[-1]
+        else:
+            number_part = rem_raw
+        
+        # 2. Quitamos ceros a la izquierda (0012345 -> 12345)
+        rem_limpio = number_part.lstrip('0')
+        # -------------------------------
+
+        if not rem_limpio or not peso_raw: 
+            flash("Faltan datos o el remito es inválido (solo ceros).", "error")
             return redirect(url_for("arenera_panel"))
         
+        # Validar duplicados usando el remito YA LIMPIO
         dup = Shipment.query.filter(
             Shipment.arenera_id.in_(fam), 
             Shipment.id != s.id, 
-            Shipment.remito_arenera == rem, 
+            Shipment.remito_arenera == rem_limpio, # Comparamos contra el limpio
             Shipment.cert_status != 'Certificado'
         ).first()
         
         if dup:
-            flash(f"⚠️ El remito {rem} ya existe en el viaje #{dup.id}.", "error")
+            flash(f"⚠️ El remito {rem_limpio} ya existe en el viaje #{dup.id}.", "error")
             return redirect(url_for("arenera_panel"))
 
         try: 
-            s.peso_neto_arenera = float(peso.replace(",", "."))
+            s.peso_neto_arenera = float(peso_raw.replace(",", "."))
         except ValueError: 
             flash("Peso inválido.", "error")
             return redirect(url_for("arenera_panel"))
             
-        s.remito_arenera = rem
+        s.remito_arenera = rem_limpio  # Guardamos la versión limpia
         s.status = "Salido a SBE"
+        
+        # Limpiamos datos SBE por si hubo un cruce previo incorrecto
         s.sbe_remito = None
         s.sbe_peso_neto = None
         s.cert_status = "Pendiente"
+        
         s.operador_id = session["user_id"]
         db.session.commit()
-        flash("✅ Salida confirmada. El viaje pasó al Historial.", "success")
+        
+        flash(f"✅ Salida confirmada. Remito guardado: {rem_limpio}", "success")
         return redirect(url_for("arenera_panel"))
 
     elif action == "revertir":
