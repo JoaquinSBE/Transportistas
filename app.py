@@ -1707,6 +1707,7 @@ def arenera_export():
         flash("Error identificando cuenta.", "error")
         return redirect(url_for("arenera_panel"))
 
+    # 1. Filtros de Fecha
     today = get_arg_today()
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
@@ -1723,6 +1724,7 @@ def arenera_export():
     except ValueError:
         start_date, end_date = today, today
 
+    # 2. Consulta a la Base de Datos
     rows = (Shipment.query
             .filter(
                 Shipment.arenera_id.in_(family_ids),
@@ -1732,33 +1734,62 @@ def arenera_export():
             .order_by(Shipment.date.desc(), Shipment.id.desc())
             .all())
 
+    # 3. Crear Excel
     wb = Workbook()
     ws = wb.active
-    ws.title = "Reporte de Ventas"
+    ws.title = "Historial Logística"
 
-    headers = ["ID", "Fecha Salida", "Remito", "Transportista", "Chofer", "DNI", "CUIL", "Tn Despachadas", "Precio Unitario ($)", "Subtotal Ventas ($)", "Estado", "Fecha Certificación"]
+    # --- ENCABEZADOS IDENTICOS A LA IMAGEN ---
+    headers = [
+        "ID", 
+        "Fecha Salida", 
+        "Transportista", 
+        "Chofer", 
+        "Patente", 
+        "Remito (Salida)", 
+        "Tn Salida", 
+        "Fecha Llegada SBE", 
+        "Remito SBE", 
+        "Tn Llegada SBE", 
+        "Estado"
+    ]
     ws.append(headers)
 
     for s in rows:
-        peso_pagable = s.peso_neto_arenera or 0
-        
-        if s.frozen_arena_price is not None:
-            precio_unit = s.frozen_arena_price
-        else:
-            precio_unit = s.arenera.custom_price or 0
-            
-        total_venta = peso_pagable * precio_unit
+        # Formato de Fechas
         f_salida = s.date.strftime("%d/%m/%Y")
-        f_certif = s.cert_fecha.strftime("%d/%m/%Y") if s.cert_fecha else "-"
-        cuil_str = calcular_cuil(s.dni, s.gender)
+        f_llegada = s.sbe_fecha_llegada.strftime("%d/%m/%Y") if s.sbe_fecha_llegada else "-"
+        
+        # Datos SBE (Si está certificado usamos el final, si no, el detectado)
+        remito_sbe = s.final_remito if s.final_remito else (s.sbe_remito or "-")
+        peso_sbe   = s.final_peso if s.final_peso else (s.sbe_peso_neto or 0)
+        if peso_sbe == 0: peso_sbe = "-"
 
+        # Lógica de Estado (Humanamente legible)
+        estado_str = "En Viaje"
+        if s.cert_status == 'Certificado':
+            estado_str = "Certificado"
+        elif s.status in ['Llego', 'Llegado a SBE'] or s.sbe_fecha_llegada:
+            estado_str = "Llegado SBE"
+        elif s.status == 'Salido a SBE' or (s.remito_arenera and not s.sbe_fecha_llegada):
+            estado_str = "Salido a SBE"
+
+        # Agregar fila
         ws.append([
-            s.id, f_salida, s.remito_arenera or "",
+            s.id,
+            f_salida,
             s.transportista.username if s.transportista else "",
-            s.chofer, s.dni, cuil_str, peso_pagable, precio_unit, total_venta,
-            s.cert_status if s.cert_status != "Pendiente" else s.status, f_certif
+            s.chofer,
+            s.tractor, # Patente
+            s.remito_arenera or "",
+            s.peso_neto_arenera or 0,
+            f_llegada,
+            remito_sbe,
+            peso_sbe,
+            estado_str
         ])
 
+    # 4. Ajustar ancho de columnas automáticamente
     for col in ws.columns:
         max_length = 0
         column = col[0].column_letter
@@ -1769,12 +1800,13 @@ def arenera_export():
             except: pass
         ws.column_dimensions[column].width = (max_length + 2)
 
+    # 5. Enviar archivo
     bio = io.BytesIO()
     wb.save(bio)
     bio.seek(0)
     resp = make_response(bio.getvalue())
     resp.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    fname = f"Ventas_{u.username}_{start_date.strftime('%d%m')}-{end_date.strftime('%d%m')}.xlsx"
+    fname = f"Historial_{u.username}_{start_date.strftime('%d%m')}-{end_date.strftime('%d%m')}.xlsx"
     resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
     return resp
 
