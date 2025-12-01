@@ -177,6 +177,11 @@
               <th>Arenera</th>
               <th>Chofer / DNI</th>
               <th>Equipo (Tractor/Batea)</th>
+              
+              <th>Remito (Sal)</th>
+              <th>Tn Salida</th>
+              <th>Remito (SBE)</th>
+              <th>Tn SBE</th>
               <th>Tipo Carga</th>
               <th class="text-center">Estado</th>
             </tr>
@@ -198,22 +203,43 @@
                  <div class="font-monospace small">{{ s.tractor }}</div>
                  <div class="font-monospace small text-muted">{{ s.trailer }}</div>
               </td>
+
+              <td data-field="find">{{ s.remito_arenera or '-' }}</td>
+              <td class="fw-medium">{{ "%.2f"|format(s.peso_neto_arenera) if s.peso_neto_arenera else '-' }}</td>
+
+              <td data-field="find">
+                  {% if s.final_remito %}
+                      <span class="text-success">{{ s.final_remito }}</span>
+                  {% elif s.sbe_remito %}
+                      <span class="text-primary">{{ s.sbe_remito }}</span>
+                  {% else %}
+                      -
+                  {% endif %}
+              </td>
+              <td class="fw-medium">
+                  {% set w_sbe = s.final_peso or s.sbe_peso_neto %}
+                  {% if w_sbe %}
+                     {{ "%.2f"|format(w_sbe) }}
+                  {% else %}
+                     -
+                  {% endif %}
+              </td>
               
               <td><span class="badge bg-light text-dark border fw-normal">{{ s.tipo }}</span></td>
               
               <td class="text-center">
-                {% if s.status == 'Llego' %}
+                {% if s.status == 'Llego' or s.status == 'Llegado a SBE' %}
                   <span class="badge-status bg-status-llego"><i class="fa-solid fa-check me-1"></i>Llegó</span>
                 {% elif s.status == 'En viaje' %}
                   <span class="badge-status bg-status-viaje"><i class="fa-solid fa-truck-fast me-1"></i>En Viaje</span>
                 {% else %}
-                  <span class="badge bg-secondary">{{ s.status }}</span>
+                  <span class="badge bg-secondary badge-status">{{ s.status }}</span>
                 {% endif %}
               </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="7" class="text-center py-5 text-muted">
+                <td colspan="11" class="text-center py-5 text-muted">
                     <i class="fa-regular fa-folder-open fa-2x mb-3 opacity-25"></i><br>
                     No hay viajes que coincidan con los filtros.
                 </td>
