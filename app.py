@@ -2307,57 +2307,105 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     target_user = User.query.get(int(target_id))
     if not target_user: return None, None, "Usuario no encontrado"
 
-    q = Shipment.query.filter(Shipment.cert_status == "Certificado")
+    q = Shipment.query
     
-    if target_type == 'transportista':
-        q = q.filter(Shipment.transportista_id == target_user.id)
-    else:
-        q = q.filter(Shipment.arenera_id == target_user.id)
+    # ---------------------------------------------------------
+    # 1. LÓGICA DE FILTRADO (IGUAL QUE EN EL PANEL DE CONTROL)
+    # ---------------------------------------------------------
+    
+    # ¿Es una Arenera que cobra por SALIDA? (No requiere certificado)
+    is_salida_mode = (target_type == 'arenera' and target_user.cert_type == 'salida')
 
-    if date_mode == 'travel':
-        q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
+    if is_salida_mode:
+        q = q.filter(
+            Shipment.arenera_id == target_user.id,
+            Shipment.date >= start_date, 
+            Shipment.date <= end_date,
+            Shipment.peso_neto_arenera != None,
+            Shipment.peso_neto_arenera > 0,
+            # Aceptamos viajes en curso o finalizados, siempre que hayan salido
+            Shipment.status.in_(['Salido a SBE', 'Llego', 'Llegado a SBE', 'Certificado'])
+        ).order_by(Shipment.date.asc())
+        
     else:
-        q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
+        # Lógica Estándar (Transportistas o Areneras por Llegada) -> Requiere CERTIFICADO
+        q = q.filter(Shipment.cert_status == "Certificado")
+        
+        if target_type == 'transportista':
+            q = q.filter(Shipment.transportista_id == target_user.id)
+        else:
+            q = q.filter(Shipment.arenera_id == target_user.id)
+
+        if date_mode == 'travel':
+            q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
+        else:
+            q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
 
     shipments = q.all()
-    if not shipments: return None, None, "No hay datos certificados."
+    if not shipments: return None, None, "No hay datos para el rango seleccionado."
 
+    # ---------------------------------------------------------
+    # 2. CÁLCULOS (SOPORTA VIAJES NO CERTIFICADOS)
+    # ---------------------------------------------------------
     total_tn = 0.0
     subtotal = 0.0
     descuento_dinero = 0.0
-    tn_merma = 0.0
     items = []
     
+    # Precio actual (por si el viaje no está congelado)
     ref_price = target_user.custom_price or 0
 
     for s in shipments:
-        if s.frozen_flete_neto is not None:
+        # ¿Tiene valores históricos congelados?
+        use_frozen = (s.frozen_flete_neto is not None)
+        
+        # A. PRECIO
+        if use_frozen:
             precio_unit = s.frozen_flete_price if target_type == 'transportista' else s.frozen_arena_price
-            if target_type == 'transportista':
-                neto_linea = s.frozen_flete_neto
-                merma_linea = s.frozen_merma_money or 0
-                peso_pagable = (neto_linea + merma_linea) / (precio_unit if precio_unit else 1)
-            else:
-                peso_pagable = s.peso_neto_arenera or 0
-                neto_linea = peso_pagable * (precio_unit or 0)
-                merma_linea = 0
         else:
             precio_unit = ref_price
-            merma_linea = 0
-            peso_pagable = s.final_peso if target_type=='transportista' else s.peso_neto_arenera
-            neto_linea = peso_pagable * precio_unit
 
+        # B. PESO Y TOTALES
+        merma_linea = 0.0
+        
+        if target_type == 'transportista':
+            # Lógica Flete
+            if use_frozen:
+                neto_linea = s.frozen_flete_neto
+                merma_linea = s.frozen_merma_money or 0
+                # Reconstruimos peso aprox para mostrar
+                peso_pagable = (neto_linea + merma_linea) / (precio_unit if precio_unit else 1)
+            else:
+                # Estimación al vuelo (Si es Transportista, generalmente requiere certificado, 
+                # pero dejamos esto por seguridad)
+                peso_pagable = s.final_peso or s.sbe_peso_neto or 0
+                neto_linea = peso_pagable * precio_unit
+
+        else:
+            # Lógica Venta Arena
+            # En modo Salida, pagamos lo que dice la balanza de origen
+            peso_pagable = s.peso_neto_arenera or 0
+            neto_linea = peso_pagable * (precio_unit or 0)
+
+        # Acumular
         total_tn += peso_pagable
         subtotal += (neto_linea + merma_linea)
         descuento_dinero += merma_linea
-        if merma_linea > 0 and precio_unit:
-             tn_merma += (merma_linea / precio_unit)
+        
+        # Fechas para el PDF
+        f_llegada_str = "-"
+        if s.sbe_fecha_llegada: 
+            f_llegada_str = s.sbe_fecha_llegada.strftime("%d/%m")
+        
+        f_cert_str = "-"
+        if s.cert_fecha:
+            f_cert_str = s.cert_fecha.strftime("%d/%m")
 
         items.append({
-            "remito": s.final_remito,
+            "remito": s.final_remito if s.cert_status == 'Certificado' else (s.remito_arenera or s.sbe_remito),
             "f_salida": s.date.strftime("%d/%m"),
-            "f_llegada": s.sbe_fecha_llegada.strftime("%d/%m") if s.sbe_fecha_llegada else "-",
-            "f_certif": s.cert_fecha.strftime("%d/%m") if s.cert_fecha else "-",
+            "f_llegada": f_llegada_str,
+            "f_certif": f_cert_str,
             "chofer": s.chofer[:18], 
             "patente": s.tractor,
             "peso": peso_pagable,
@@ -2367,6 +2415,7 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     total_neto = subtotal - descuento_dinero
     total_iva_inc = total_neto * 1.21
 
+    # Renderizar HTML
     html = render_template(
         "pdf_template.html",
         target_id=target_user.id,
@@ -2380,7 +2429,7 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
         precio_unitario=ref_price,
         subtotal=subtotal,
         descuento_dinero=descuento_dinero,
-        tn_merma=tn_merma,
+        tn_merma=0, 
         total_neto=total_neto,
         total_iva_inc=total_iva_inc
     )
@@ -2389,7 +2438,7 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     pisa_status = pisa.CreatePDF(io.StringIO(html), dest=pdf_io)
     if pisa_status.err: return None, None, f"Error PDF: {pisa_status.err}"
     pdf_io.seek(0)
-    fname = f"Certif_{target_user.username}_{start_date.strftime('%d%m')}.pdf"
+    fname = f"Liquidacion_{target_user.username}_{start_date.strftime('%d%m')}.pdf"
     
     return pdf_io.getvalue(), fname, None
 
