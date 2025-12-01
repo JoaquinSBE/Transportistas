@@ -2107,6 +2107,7 @@ def admin_control_arena():
     end_str   = request.args.get("end")
     today = get_arg_today()
     
+    # 1. Resolver fechas
     if not start_str:
         last_monday = today - timedelta(days=today.weekday() + 7)
         start_date = last_monday
@@ -2126,20 +2127,47 @@ def admin_control_arena():
 
     if aid and aid != "none":
         selected_arenera = User.query.get(int(aid))
-        q = (Shipment.query
-             .filter(Shipment.arenera_id == int(aid))
-             .filter(Shipment.cert_status == "Certificado")
-             .filter(Shipment.date >= start_date, Shipment.date <= end_date)
-             .order_by(Shipment.date.asc())
-             )
-        shipments = q.all()
         
+        # Query base filtrando por la arenera seleccionada
+        q = Shipment.query.filter(Shipment.arenera_id == int(aid))
+        
+        # --- LÓGICA CORREGIDA ---
+        if selected_arenera.cert_type == 'salida':
+            # CASO A: Cobran por SALIDA (Fecha Remito)
+            # NO pedimos que esté 'Certificado'. Solo pedimos que haya salido (tenga peso).
+            q = q.filter(
+                Shipment.date >= start_date, 
+                Shipment.date <= end_date,
+                Shipment.peso_neto_arenera != None,
+                Shipment.peso_neto_arenera > 0,
+                # Filtramos status para asegurar que no sea un viaje recién creado (En viaje) 
+                # sino uno que ya confirmaron salida.
+                Shipment.status.in_(['Salido a SBE', 'Llego', 'Llegado a SBE', 'Certificado'])
+            )
+        else:
+            # CASO B: Cobran por LLEGADA (Certificación)
+            # Aquí SÍ mantenemos la exigencia de que esté Certificado.
+            q = q.filter(
+                Shipment.cert_status == "Certificado",
+                Shipment.date >= start_date,
+                Shipment.date <= end_date
+            )
+        # ------------------------
+
+        shipments = q.order_by(Shipment.date.asc()).all()
+        
+        # Cálculos
         for s in shipments:
             peso = s.peso_neto_arenera or 0
+            
+            # Si ya se certificó, tiene precio congelado. Si no (caso Salida pendiente), precio actual.
             precio = s.frozen_arena_price if s.frozen_arena_price is not None else (s.arenera.custom_price or 0)
+            
             monto = peso * precio
             total_tn += peso
             total_money += monto
+            
+            # Guardamos valores temporales para mostrar en el HTML
             s._calc_precio = precio
             s._calc_total_arena = monto
 
