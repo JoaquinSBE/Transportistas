@@ -101,8 +101,17 @@
                     <option value="Certificado" {{ 'selected' if status == 'Certificado' }}>Certificado</option>
                 </select>
             </div>
-            <div class="col-12 col-md-auto">
-                <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">Filtrar</button>
+            
+            <div class="col-6 col-md-auto">
+                <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Filtrar
+                </button>
+            </div>
+            
+            <div class="col-6 col-md-auto">
+                <a href="{{ url_for('arenera_export', start=start_date, end=end_date) }}" class="btn btn-success btn-sm w-100 fw-bold">
+                    <i class="fa-solid fa-file-excel me-1"></i>
+                </a>
             </div>
         </form>
     </div>
