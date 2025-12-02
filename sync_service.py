@@ -44,6 +44,7 @@ def get_graph_token():
     return result.get("access_token")
 
 def download_sharepoint_excel(share_url, token):
+    if not share_url: return None
     base64_value = base64.urlsafe_b64encode(share_url.encode("utf-8")).decode("utf-8")
     encoded_url = "u!" + base64_value.rstrip("=")
     endpoint = f"https://graph.microsoft.com/v1.0/shares/{encoded_url}/driveItem/content"
@@ -52,10 +53,46 @@ def download_sharepoint_excel(share_url, token):
     if resp.status_code == 200: return io.BytesIO(resp.content)
     return None
 
+def prepare_dataframe(df):
+    """Limpia columnas y genera fecha temporal para filtrado"""
+    if df is None or df.empty: return pd.DataFrame()
+    # Limpiar nombres de columnas
+    df.columns = [c.strip() for c in df.columns]
+    
+    # Asegurar que existe Fecha Salida para poder filtrar
+    if 'Fecha Salida' not in df.columns:
+        return pd.DataFrame() 
+        
+    # Crear columna temporal de fecha real para comparar
+    df['__temp_date'] = pd.to_datetime(df['Fecha Salida'], errors='coerce').dt.date
+    return df
+
+def download_and_concat(links, token, label="", sheet_name="Reporte"):
+    """
+    Descarga lista de links y devuelve un DataFrame unificado.
+    Permite especificar el nombre de la hoja (sheet_name).
+    """
+    dfs = []
+    print(f"Descargando {label} ({len(links)} archivos) - Hoja: '{sheet_name}'...")
+    for i, link in enumerate(links):
+        if link:
+            content = download_sharepoint_excel(link, token)
+            if content:
+                try:
+                    # Aquí usamos el sheet_name dinámico
+                    df = pd.read_excel(content, sheet_name=sheet_name)
+                    dfs.append(df)
+                except Exception as e:
+                    print(f"Error leyendo Excel {label} #{i+1}: {e}")
+    
+    if dfs:
+        return pd.concat(dfs, ignore_index=True)
+    return pd.DataFrame()
+
 # --- FUNCIÓN PRINCIPAL ---
 
 def run_sbe_sync(db, Shipment):
-    print("--- 🔍 INICIO SYNC SBE (AGRUPACIÓN ESTRICTA) ---")
+    print("--- 🔍 INICIO SYNC SBE (HIBRIDO: 2 HIST + 2 ONLINE) ---")
     
     try:
         res = db.session.execute(text("SELECT tolerance_kg FROM system_config LIMIT 1")).fetchone()
@@ -66,26 +103,55 @@ def run_sbe_sync(db, Shipment):
     token = get_graph_token()
     if not token: return (0, "Error credenciales Azure.")
 
-    links = [os.getenv("SHAREPOINT_LINK_1"), os.getenv("SHAREPOINT_LINK_2")]
-    dfs = []
-
-    for i, link in enumerate(links):
-        if link:
-            content = download_sharepoint_excel(link, token)
-            if content:
-                try:
-                    df = pd.read_excel(content, sheet_name="Reporte")
-                    dfs.append(df)
-                except Exception as e:
-                    print(f"Error leyendo Excel {i}: {e}")
-
-    if not dfs: return (0, "No se descargaron archivos.")
-
-    raw_df = pd.concat(dfs, ignore_index=True)
-    raw_df.columns = [c.strip() for c in raw_df.columns]
-    
     # -------------------------------------------------------
-    # NUEVA LÓGICA DE AGRUPACIÓN SEGURA
+    # 1. DESCARGA DE FUENTES
+    # -------------------------------------------------------
+    
+    # A. Archivos Históricos (Base) -> Hoja "Reporte"
+    links_hist = [
+        os.getenv("SHAREPOINT_LINK_1"), 
+        os.getenv("SHAREPOINT_LINK_2")
+    ]
+    df_historico = download_and_concat(links_hist, token, "Histórico", sheet_name="Reporte")
+
+    # B. Archivos Online (Actuales) -> Hoja "Reporte Diario"
+    links_online = [
+        os.getenv("SHAREPOINT_LINK_ONLINE_1"), 
+        os.getenv("SHAREPOINT_LINK_ONLINE_2")
+    ]
+    df_online = download_and_concat(links_online, token, "Online", sheet_name="Reporte Diario")
+
+    # -------------------------------------------------------
+    # 2. FILTRADO POR FECHA (AYER vs HOY)
+    # -------------------------------------------------------
+    
+    # Preparar dataframes
+    df_historico = prepare_dataframe(df_historico)
+    df_online    = prepare_dataframe(df_online)
+    
+    # Fecha de corte: HOY
+    hoy = datetime.now().date()
+    print(f"Fecha de corte: {hoy}")
+
+    # Filtrar Histórico: Solo registros ANTERIORES a hoy
+    if not df_historico.empty:
+        rows_h_before = len(df_historico)
+        df_historico = df_historico[df_historico['__temp_date'] < hoy].copy()
+        print(f"Histórico (Final): {rows_h_before} -> {len(df_historico)} filas (< {hoy}).")
+
+    # Filtrar Online: Solo registros de HOY en adelante
+    if not df_online.empty:
+        rows_o_before = len(df_online)
+        df_online = df_online[df_online['__temp_date'] >= hoy].copy()
+        print(f"Online (Final): {rows_o_before} -> {len(df_online)} filas (>= {hoy}).")
+
+    # Unir todo
+    raw_df = pd.concat([df_historico, df_online], ignore_index=True)
+    
+    if raw_df.empty: return (0, "No se encontraron datos válidos tras la descarga y filtrado.")
+
+    # -------------------------------------------------------
+    # 3. LÓGICA DE AGRUPACIÓN (Igual que antes)
     # -------------------------------------------------------
     
     # A. Filtro básico
@@ -94,14 +160,11 @@ def run_sbe_sync(db, Shipment):
     
     raw_df = raw_df.dropna(subset=['Factura'])
     
-    # B. Normalización para CLAVES DE AGRUPACIÓN
-    # Creamos columnas temporales normalizadas para usarlas de llave única
+    # B. Normalización
     raw_df['Key_Remito']  = raw_df['Factura'].apply(normalize_remito)
     raw_df['Key_Fecha']   = pd.to_datetime(raw_df['Fecha Salida'], errors='coerce').dt.date
     
-    # Normalizamos Patentes y Origen para evitar que un espacio o mayúscula impida la suma
     raw_df['Key_Patente'] = raw_df['Patente Tractor'].apply(clean_patente)
-    # Si existe patente camión, la usamos, si no, usamos vacío para no romper el group
     if 'Patente Camión' in raw_df.columns:
         raw_df['Key_Acoplado'] = raw_df['Patente Camión'].apply(clean_patente)
     else:
@@ -109,47 +172,39 @@ def run_sbe_sync(db, Shipment):
         
     raw_df['Key_Origen'] = raw_df['Origen'].apply(normalize_text)
     
-    # Asegurar peso numérico
     raw_df['Peso Neto'] = pd.to_numeric(raw_df['Peso Neto'], errors='coerce').fillna(0)
 
-    # C. AGRUPAR: (Remito + Fecha + Patente + Acoplado + Origen) -> Sumar Peso
-    # Esto es la seguridad máxima.
+    # C. Agrupación Estricta
     agg_rules = {
         'Peso Neto': 'sum',
-        # Para el resto, nos quedamos con el dato de la primera fila del grupo
         'Factura': 'first',          
         'Patente Tractor': 'first',
         'Patente Camión': 'first',
         'Fecha Salida': 'first',     
         'Fecha Entrada': 'first'
     }
-    
-    # Filtramos reglas por si alguna columna no existe en el Excel
     actual_agg = {k: v for k, v in agg_rules.items() if k in raw_df.columns}
-    
-    # Claves de agrupación
     group_keys = ['Key_Remito', 'Key_Fecha', 'Key_Patente', 'Key_Acoplado', 'Key_Origen']
     
     full_data_clean = raw_df.groupby(group_keys, as_index=False).agg(actual_agg)
 
-    # D. Columnas limpias para el cruce final con la DB
+    # D. Renombrar para cruce
     full_data_clean['Patente_Clean'] = full_data_clean['Key_Patente']
     full_data_clean['Patente_Camion_Clean'] = full_data_clean['Key_Acoplado']
-    # (El remito ya está en Key_Remito, pero lo renombramos para compatibilidad con el código de abajo)
     full_data_clean['Remito_Norm'] = full_data_clean['Key_Remito']
     full_data_clean['Fecha_Solo'] = full_data_clean['Key_Fecha']
 
-    print(f"📊 Filas procesadas (Agrupación Segura): {len(full_data_clean)}")
+    print(f"📊 Filas procesadas (Total Agrupado): {len(full_data_clean)}")
 
     # -------------------------------------------------------
-    # LÓGICA DE CRUCE (Idéntica a la anterior, usando la tabla agrupada)
+    # 4. LÓGICA DE CRUCE
     # -------------------------------------------------------
 
     pendientes = db.session.query(Shipment).filter(
         Shipment.cert_status != 'Certificado',
         Shipment.remito_arenera != None, 
         Shipment.remito_arenera != "",
-        Shipment.status.in_(['En viaje', 'Salió', 'Llego'])
+        Shipment.status.in_(['En viaje', 'Salió', 'Llego', 'Salido a SBE']) 
     ).all()
 
     matches = 0
@@ -167,7 +222,6 @@ def run_sbe_sync(db, Shipment):
         match_type = ""
         reasons = [] 
 
-        # Filtro fecha
         valid_sbe = full_data_clean[full_data_clean['Fecha_Solo'] >= ship_date]
         if valid_sbe.empty: continue 
 
