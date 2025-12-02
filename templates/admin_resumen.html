@@ -166,9 +166,10 @@
          <a href="{{ url_for('admin_config') }}" class="btn btn-sm btn-outline-secondary">
             <i class="fa-solid fa-gear me-1"></i> Config
          </a>
-         <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-primary-soft text-primary bg-primary-subtle fw-medium">
-            <i class="fa-solid fa-arrow-left me-1"></i> Volver
-         </a>
+          <a href="{{ url_for('admin_dashboard') if session.get('tipo') == 'gestion' else url_for('admin_panel') }}" 
+            class="btn btn-sm btn-primary-soft text-primary bg-primary-subtle fw-medium">
+              <i class="fa-solid fa-arrow-left me-1"></i> Volver
+          </a>
       </div>
     </div>
   </nav>
