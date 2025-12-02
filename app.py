@@ -1300,6 +1300,117 @@ def transportista_quotas():
         totals_by_date=totals_by_date
     )
 
+@app.route("/admin/quotas/arenera/<int:arenera_id>", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "gestion")
+def manage_quotas_arenera(arenera_id):
+    # 1. Obtener la Arenera y el rango de fechas
+    arenera = User.query.get_or_404(arenera_id)
+    transportistas = User.query.filter_by(tipo="transportista").order_by(User.username.asc()).all()
+
+    if request.method == "POST":
+        start_str = (request.form.get("start_date") or "").strip()
+    else:
+        start_str = (request.args.get("start") or "").strip()
+
+    try:
+        start_date = date.fromisoformat(start_str) if start_str else get_arg_today()
+    except ValueError:
+        start_date = get_arg_today()
+
+    week_dates = [start_date + timedelta(days=i) for i in range(7)]
+
+    # 2. Guardar datos (POST)
+    if request.method == "POST":
+        total_inserts = total_updates = total_deletes = 0
+        try:
+            for t in transportistas:
+                for d in week_dates:
+                    # La clave ahora es q_{transportista_id}_{fecha}
+                    key = f"q_{t.id}_{d.isoformat()}"
+                    raw = (request.form.get(key) or "").strip()
+
+                    # Buscar cupo existente
+                    q = db.session.query(Quota).filter_by(
+                        transportista_id=t.id,
+                        arenera_id=arenera.id, # Arenera fija
+                        date=d
+                    ).first()
+
+                    if raw == "" or raw == "0":
+                        if q:
+                            db.session.delete(q)
+                            total_deletes += 1
+                        continue
+
+                    try:
+                        v = int(raw)
+                    except ValueError:
+                        continue
+                    if v < 0: v = 0
+
+                    if q:
+                        q.limit = v
+                        if (q.used or 0) > v: q.used = v
+                        total_updates += 1
+                    else:
+                        q = Quota(
+                            transportista_id=t.id,
+                            arenera_id=arenera.id,
+                            date=d,
+                            limit=v,
+                            used=0
+                        )
+                        db.session.add(q)
+                        total_inserts += 1
+
+            db.session.commit()
+            flash(f"Cupos actualizados para {arenera.username}: {total_inserts} nuevos, {total_updates} editados.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Error al guardar: {e}", "error")
+
+        return redirect(url_for("manage_quotas_arenera", arenera_id=arenera.id, start=start_date.isoformat()))
+
+    # 3. Preparar datos para mostrar (GET)
+    existing = (
+        Quota.query
+        .filter(
+            Quota.arenera_id == arenera.id,
+            Quota.date.in_(week_dates)
+        ).all()
+    )
+    # Mapa: (transportista_id, fecha) -> Objeto Quota
+    quota_map = {(q.transportista_id, q.date): q for q in existing}
+
+    # Mapa de Uso real (Viajes cargados)
+    from sqlalchemy import func
+    used_rows = (
+        db.session.query(
+            Shipment.transportista_id,
+            Shipment.date,
+            func.count(Shipment.id)
+        )
+        .filter(
+            Shipment.arenera_id == arenera.id,
+            Shipment.date >= week_dates[0],
+            Shipment.date <= week_dates[-1],
+        )
+        .group_by(Shipment.transportista_id, Shipment.date)
+        .all()
+    )
+    used_map = {(tid, d): int(c) for (tid, d, c) in used_rows}
+
+    return render_template(
+        tpl("admin_quotas_arenera"), # Usaremos una plantilla nueva
+        arenera=arenera,
+        transportistas=transportistas,
+        week_dates=week_dates,
+        quota_map=quota_map,
+        used_map=used_map,
+        start_date=start_date
+    )
+
 @app.route("/transportista/arenera/<int:arenera_id>", methods=["GET", "POST"])
 @login_required
 @role_required("transportista")

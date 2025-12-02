@@ -368,6 +368,9 @@
                     {% endif %}
                   </td>
                   <td class="text-end pe-3">
+                    <a href="{{ url_for('manage_quotas_arenera', arenera_id=r.a.id) }}" class="btn-icon" title="Gestionar Cupos">
+                        <i class="fa-solid fa-calendar-days"></i>
+                    </a>
                     <a href="{{ url_for('todos_camiones') }}?arenera={{ r.a.username }}" class="btn-icon btn-sm"><i class="fa-solid fa-eye"></i></a>
                     
                     <button type="button" onclick="promptResetPassword({{ r.a.id }}, '{{ r.a.username }}')" class="btn-icon btn-sm" title="Blanquear Clave">

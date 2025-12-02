@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gestión Cupos | {{ transportista.username }}</title>
+  <title>Gestión Cupos | {{ arenera.username }}</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -77,7 +77,7 @@
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
     
-    /* Primera Columna (Arenera) Sticky */
+    /* Primera Columna (Transportista) Sticky */
     .table-quota th:first-child,
     .table-quota td:first-child {
       position: sticky;
@@ -86,8 +86,8 @@
       background: #fff;
       border-right: 2px solid #e5e7eb; /* Separación visual */
       text-align: left;
-      width: 180px;
-      min-width: 180px;
+      width: 220px; /* Un poco más ancho para nombres de empresas */
+      min-width: 220px;
     }
     .table-quota th:first-child { z-index: 30; background: #f8fafc; }
 
@@ -168,13 +168,14 @@
          </a>
          <div class="vr mx-2 d-none d-md-block"></div>
          <div class="d-none d-md-block ms-2">
-            <small class="text-muted d-block text-xs text-uppercase">Transportista</small>
-            <span class="fw-bold text-dark">{{ transportista.username }}</span>
+            <small class="text-muted d-block text-xs text-uppercase">Arenera</small>
+            <span class="fw-bold text-dark">{{ arenera.username }}</span>
          </div>
       </div>
       
       <div class="ms-auto">
-         <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-outline-secondary">
+         <a href="{{ url_for('admin_dashboard') if session.get('tipo') == 'gestion' else url_for('admin_panel') }}" 
+            class="btn btn-sm btn-outline-secondary">
             <i class="fa-solid fa-arrow-left me-1"></i> Volver
          </a>
       </div>
@@ -198,14 +199,14 @@
                 <button type="submit" class="btn btn-primary">
                     <i class="fa-solid fa-filter me-2"></i>Ver Semana
                 </button>
-                <a href="{{ url_for('manage_quotas', transportista_id=transportista.id) }}" class="btn btn-light text-muted border ms-2">
+                <a href="{{ url_for('manage_quotas_arenera', arenera_id=arenera.id) }}" class="btn btn-light text-muted border ms-2">
                     Hoy
                 </a>
             </div>
         </form>
     </div>
 
-    <form method="POST" action="{{ url_for('manage_quotas', transportista_id=transportista.id) }}">
+    <form method="POST" action="{{ url_for('manage_quotas_arenera', arenera_id=arenera.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <input type="hidden" name="start_date" value="{{ start_date }}">
         
@@ -215,7 +216,7 @@
                     <thead>
                         <tr>
                             <th class="bg-white ps-4">
-                                <i class="fa-solid fa-industry me-2 text-muted"></i>Arenera
+                                <i class="fa-solid fa-truck me-2 text-muted"></i>Transportista
                             </th>
                             {% for d in week_dates %}
                                 {% set is_today = (d == get_arg_today()) %}
@@ -227,23 +228,23 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for a in areneras %}
+                        {% for t in transportistas %}
                         <tr>
                             <td class="fw-medium text-dark ps-4 bg-white">
-                                {{ a.username }}
+                                {{ t.username }}
                             </td>
 
                             {% for d in week_dates %}
-                                {% set q = quota_map.get((a.id, d)) %}
+                                {% set q = quota_map.get((t.id, d)) %}
                                 {% set limit_val = (q.limit if q else 0) %}
-                                {% set used_val = used_map.get((a.id, d), 0) %}
+                                {% set used_val = used_map.get((t.id, d), 0) %}
                                 
                                 {% set is_over = (used_val > limit_val and limit_val > 0) %}
                                 
                                 <td>
                                     <div class="cell-wrapper">
-                                      <input type="number" min="0" step="1"
-                                            name="q_{{ a.id }}_{{ d }}"
+                                        <input type="number" min="0" step="1"
+                                            name="q_{{ t.id }}_{{ d }}"
                                             class="quota-input"
                                             data-date="{{ d }}" 
                                             value="{{ '' if limit_val == 0 else limit_val }}"
@@ -262,31 +263,31 @@
                         {% endfor %}
                     </tbody>
                     <tfoot style="position: sticky; bottom: 0; z-index: 25; box-shadow: 0 -2px 5px rgba(0,0,0,0.1);">
-                      <tr>
-                          <th class="bg-primary text-white ps-4 text-start">
-                              TOTAL DÍA
-                          </th>
-                          {% for d in week_dates %}
-                              {% set ns = namespace(day_limit=0, day_used=0) %}
-                              {% for a in areneras %}
-                                  {% set q = quota_map.get((a.id, d)) %}
-                                  {% set ns.day_limit = ns.day_limit + (q.limit if q else 0) %}
-                                  {% set ns.day_used = ns.day_used + used_map.get((a.id, d), 0) %}
-                              {% endfor %}
+                        <tr>
+                            <th class="bg-primary text-white ps-4 text-start">
+                                TOTAL DÍA
+                            </th>
+                            {% for d in week_dates %}
+                                {% set ns = namespace(day_limit=0, day_used=0) %}
+                                {% for t in transportistas %}
+                                    {% set q = quota_map.get((t.id, d)) %}
+                                    {% set ns.day_limit = ns.day_limit + (q.limit if q else 0) %}
+                                    {% set ns.day_used = ns.day_used + used_map.get((t.id, d), 0) %}
+                                {% endfor %}
 
-                              <th class="bg-light border text-center align-middle py-2">
-                                  <div class="d-flex flex-column align-items-center justify-content-center">
-                                      <span class="fs-6 fw-bold text-primary" id="total-limit-{{ d }}">
-                                          {{ ns.day_limit }}
-                                      </span>
-                                      
-                                      {% if ns.day_used > 0 %}
-                                      {% endif %}
-                                  </div>
-                              </th>
-                          {% endfor %}
-                      </tr>
-                  </tfoot>
+                                <th class="bg-light border text-center align-middle py-2">
+                                    <div class="d-flex flex-column align-items-center justify-content-center">
+                                        <span class="fs-6 fw-bold text-primary" id="total-limit-{{ d }}">
+                                            {{ ns.day_limit }}
+                                        </span>
+
+                                        {% if ns.day_used > 0 %}
+                                        {% endif %}
+                                    </div>
+                                </th>
+                            {% endfor %}
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
             <div class="bg-light p-2 text-center border-top">
