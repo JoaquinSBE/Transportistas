@@ -99,7 +99,7 @@ def download_and_concat(links, token, label="", sheet_name="Reporte"):
 # --- FUNCIÓN PRINCIPAL ---
 
 def run_sbe_sync(db, Shipment):
-    print("--- 🔍 INICIO SYNC SBE (V12: REMITO LIMPIO) ---")
+    print("--- 🔍 INICIO SYNC SBE (V17: SOLO REMITO - CERO PATENTE) ---")
     
     try:
         res = db.session.execute(text("SELECT tolerance_kg FROM system_config LIMIT 1")).fetchone()
@@ -141,7 +141,6 @@ def run_sbe_sync(db, Shipment):
         raw_df = raw_df.drop_duplicates(subset=['__temp_factura'], keep='last')
 
     # 4. NORMALIZACIÓN
-    # Aquí generamos la columna 'Key_Remito' que contiene el dato limpio (Ej: 131914)
     raw_df['Key_Remito']  = raw_df['Factura'].apply(normalize_remito)
     raw_df['Key_Fecha']   = pd.to_datetime(raw_df['Fecha Salida'], dayfirst=True, errors='coerce').dt.date
     raw_df['Key_Patente'] = raw_df['Patente Tractor'].apply(clean_patente)
@@ -172,13 +171,11 @@ def run_sbe_sync(db, Shipment):
         if col in raw_df.columns: raw_df[col] = raw_df[col].fillna("")
 
     full_data_clean = raw_df.groupby(group_keys, as_index=False).agg(actual_agg)
+    full_data_clean.reset_index(drop=True, inplace=True)
 
     full_data_clean['Patente_Clean'] = full_data_clean['Key_Patente']
     full_data_clean['Patente_Camion_Clean'] = full_data_clean['Key_Acoplado']
-    
-    # [CAMBIO IMPORTANTE] Disponibilizamos el remito limpio para usarlo luego
     full_data_clean['Remito_Norm'] = full_data_clean['Key_Remito']
-    
     full_data_clean['Fecha_Solo'] = full_data_clean['Key_Fecha']
 
     # 6. CRUCE
@@ -190,6 +187,7 @@ def run_sbe_sync(db, Shipment):
     ).all()
 
     matches = 0
+    used_indices = set()
 
     for ship in pendientes:
         if ship.sbe_manual_override: continue
@@ -203,10 +201,13 @@ def run_sbe_sync(db, Shipment):
         match_type = ""
         reasons = [] 
 
+        # Filtro de fecha (Estricto >=)
         valid_sbe = full_data_clean[full_data_clean['Fecha_Solo'] >= ship_date]
         if valid_sbe.empty: continue 
 
-        # A. Match Total
+        # ------------------------------------------------------------------
+        # NIVEL 1: MATCH TOTAL (Remito + Alguna Patente)
+        # ------------------------------------------------------------------
         if ship_remito:
             rem_cond = (valid_sbe['Remito_Norm'] == ship_remito)
             pat_cond = (
@@ -217,42 +218,41 @@ def run_sbe_sync(db, Shipment):
             )
             found = valid_sbe[rem_cond & pat_cond].copy()
             
+            if not found.empty:
+                found = found[~found.index.isin(used_indices)]
+
             if not found.empty: 
                 found['diff'] = (pd.to_datetime(found['Fecha_Solo']) - pd.to_datetime(ship_date)).dt.days
                 found = found.sort_values('diff')
                 if found.iloc[0]['diff'] <= 5:
                     match_row = found.iloc[0]; match_type = "Total"
 
-        # B. Solo Remito
+        # ------------------------------------------------------------------
+        # NIVEL 2: SOLO REMITO (Sin mirar patentes)
+        # ------------------------------------------------------------------
         if match_row is None and ship_remito:
             found = valid_sbe[valid_sbe['Remito_Norm'] == ship_remito].copy()
+            
+            if not found.empty:
+                found = found[~found.index.isin(used_indices)]
+
             if not found.empty: 
                 found['diff'] = (pd.to_datetime(found['Fecha_Solo']) - pd.to_datetime(ship_date)).dt.days
                 found = found.sort_values('diff')
                 if found.iloc[0]['diff'] <= 5:
                     match_row = found.iloc[0]; match_type = "Remito"
 
-        # C. Solo Patente
-        if match_row is None and (ship_trac or ship_trail):
-            pat_cond = (valid_sbe['Patente_Clean'] == ship_trac) | \
-                       (valid_sbe['Patente_Camion_Clean'] == ship_trac) | \
-                       (valid_sbe['Patente_Clean'] == ship_trail) | \
-                       (valid_sbe['Patente_Camion_Clean'] == ship_trail)
-            found = valid_sbe[pat_cond].copy()
-            if not found.empty:
-                found['diff'] = (pd.to_datetime(found['Fecha_Solo']) - pd.to_datetime(ship_date)).dt.days
-                found = found.sort_values('diff')
-                best_match = found.iloc[0]
-                if best_match['diff'] <= 3:
-                    match_row = best_match; match_type = "Patente"
+        # ------------------------------------------------------------------
+        # SE ELIMINÓ EL NIVEL 3 (SOLO PATENTE)
+        # Si no coincidió el remito, no se cruza. Punto.
+        # ------------------------------------------------------------------
 
-        # ACTUALIZACIÓN
         if match_row is not None:
             matches += 1
+            used_indices.add(match_row.name)
             
-            # [CAMBIO] Guardamos el remito LIMPIO (Remito_Norm) en lugar del crudo (Factura)
             remito_limpio = str(match_row.get('Remito_Norm', ''))
-            if not remito_limpio: # Fallback por seguridad
+            if not remito_limpio:
                 remito_limpio = normalize_remito(str(match_row.get('Factura', '')))
                 
             ship.sbe_remito = remito_limpio
@@ -260,6 +260,7 @@ def run_sbe_sync(db, Shipment):
             p_sbe_t = clean_patente(match_row.get('Patente Tractor',''))
             p_sbe_c = clean_patente(match_row.get('Patente Camión',''))
             
+            # Prioridad de asignación para display
             if p_sbe_t == ship_trac or p_sbe_t == ship_trail:
                 ship.sbe_patente = match_row.get('Patente Tractor','')
             elif p_sbe_c == ship_trac or p_sbe_c == ship_trail:
@@ -283,21 +284,18 @@ def run_sbe_sync(db, Shipment):
                     ship.sbe_fecha_llegada = sbe_llegada
 
             # -------------------------------------------------------------
-            # LÓGICA DE OBSERVACIONES
+            # LÓGICA DE OBSERVACIONES (V17)
             # -------------------------------------------------------------
             
             if match_type == "Remito": 
                 reasons.append("Revisar Patente (Coincide Remito)")
-            elif match_type == "Patente": 
-                reasons.append("Revisar Remito (Coincide Patente)")
             
-            # Doble check de Tractor
+            # Doble check de Tractor (Por si matcheó remito pero con otro camión)
             if ship_trac and p_sbe_t:
                 if ship_trac != p_sbe_t:
                     if "Revisar Patente" not in str(reasons):
                         reasons.append("Diferencia Patente Tractor")
 
-            # Check Peso
             w_local = ship.peso_neto_arenera or 0
             w_sbe   = ship.sbe_peso_neto or 0
             if w_sbe > 0:

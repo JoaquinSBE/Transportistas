@@ -121,9 +121,26 @@
         <i class="fa-solid fa-check-double text-success me-2"></i>Certificación
       </a>
       <div class="ms-auto d-flex gap-2">
-         <a href="{{ url_for('sync_sbe') }}" class="btn btn-sm btn-primary-soft text-primary fw-medium bg-primary-subtle" onclick="showSyncLoading(event)">
-            <i class="fa-solid fa-rotate me-1"></i> Sync SBE
-         </a>
+          <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-primary-soft text-primary fw-medium bg-primary-subtle dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="fa-solid fa-rotate me-1"></i> Sincronizar
+            </button>
+            <ul class="dropdown-menu shadow">
+              <li>
+                <a class="dropdown-item" href="{{ url_for('sync_sbe') }}" onclick="showSyncLoading(event)">
+                  <i class="fa-solid fa-check-circle text-success me-2"></i>Sync Normal
+                </a>
+              </li>
+              
+              <li><hr class="dropdown-divider"></li>
+              
+              <li>
+                <a class="dropdown-item text-warning fw-bold" href="{{ url_for('sync_sbe_emergency') }}" onclick="showSyncLoading(event)">
+                  <i class="fa-solid fa-triangle-exclamation me-2"></i>Sync solo patente
+                </a>
+              </li>
+            </ul>
+          </div>
          <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-outline-secondary">
             <i class="fa-solid fa-arrow-left me-1"></i> Volver
          </a>

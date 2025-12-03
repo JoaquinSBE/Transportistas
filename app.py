@@ -16,7 +16,7 @@ import time
 from zoneinfo import ZoneInfo
 from xhtml2pdf import pisa
 from flask_wtf.csrf import CSRFProtect  # Protección CSRF
-
+import emergency_sync_patente
 # ----------------------------
 # CONFIGURACIÓN ZONA HORARIA
 # ----------------------------
@@ -2422,6 +2422,20 @@ def sync_sbe():
     else: 
         flash(f"Sync ok: {matches} cruces realizados.", "success")
     return redirect(request.referrer or url_for("admin_panel"))
+
+@app.route("/admin/sync_sbe_emergency")
+@login_required
+@role_required("admin")
+def sync_sbe_emergency():
+    try:
+        # Ejecutamos la lógica del script de emergencia
+        emergency_sync_patente.run_emergency_sync()
+        flash("⚠️ Sync de Emergencia completado. Revisa los cruces 'Observados'.", "warning")
+    except Exception as e:
+        print(f"Error en sync emergencia: {e}")
+        flash("Ocurrió un error en el proceso de emergencia.", "error")
+        
+    return redirect(request.referrer or url_for("admin_certificacion"))
 
 @app.route("/admin/generate_pdf", methods=["GET"])
 @login_required
