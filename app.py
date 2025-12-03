@@ -5,7 +5,7 @@ import os
 import io, csv
 from datetime import datetime, date, timedelta
 from functools import wraps
-from sqlalchemy import func, case, text, cast, Date
+from sqlalchemy import func, case, text, cast, Date, or_
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -883,20 +883,33 @@ def admin_dashboard():
     areneras = User.query.filter_by(tipo="arenera", parent_id=None).order_by(User.username).all()
     return render_template(tpl("admin_dashboard"), areneras=areneras)
 
+# Asegúrate de tener estos imports al principio del archivo
+from sqlalchemy import cast, Date, or_
+
+# Asegúrate de tener: from sqlalchemy import cast, Date, or_
+
 @app.route("/admin/certificacion")
 @login_required
 @role_required("admin", "gestion")
 def admin_certificacion():
+    # --- Parámetros existentes ---
     view_mode  = request.args.get("view", "pendiente")
     tid_filter = request.args.get("transportista_id")
     aid_filter = request.args.get("arenera_id")
+    status_filter = request.args.get("status")
     
-    # [NUEVO] Capturamos el filtro de estado
-    status_filter = request.args.get("status") 
-
+    # Filtros de fecha de VIAJE (Salida)
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
     
+    # --- Parámetros de Búsqueda y RANGO SBE ---
+    search_q = (request.args.get("search") or "").strip()
+    
+    # [NUEVO] Capturamos inicio y fin de llegada SBE
+    arr_start_str = (request.args.get("arrival_start") or "").strip()
+    arr_end_str   = (request.args.get("arrival_end") or "").strip()
+
+    # --- Lógica de Fechas Viaje (Existente) ---
     use_date_filter = False
     if start_str and end_str:
         try:
@@ -906,11 +919,13 @@ def admin_certificacion():
         except ValueError:
             pass
 
+    # --- Listas ---
     trans_list = User.query.filter_by(tipo="transportista").order_by(User.username).all()
     aren_list  = User.query.filter_by(tipo="arenera", parent_id=None).order_by(User.username).all()
 
     q = Shipment.query
     
+    # --- Filtros Base ---
     if view_mode == "historial":
         q = q.filter(Shipment.cert_status == "Certificado")
         if use_date_filter:
@@ -922,15 +937,37 @@ def admin_certificacion():
             q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date)
         q = q.order_by(case((Shipment.cert_status == "Observado", 1), else_=2), Shipment.date.desc())
 
-    # Filtros existentes
+    # --- Aplicar Filtros Dropdown ---
     if tid_filter and tid_filter != "all":
         q = q.filter(Shipment.transportista_id == int(tid_filter))
     if aid_filter and aid_filter != "all":
         q = q.filter(Shipment.arenera_id == int(aid_filter))
-
-    # [NUEVO] Aplicar filtro de Estado
     if status_filter and status_filter != "all":
         q = q.filter(Shipment.cert_status == status_filter)
+
+    # --- Filtro de Búsqueda ---
+    if search_q:
+        q = q.filter(
+            or_(
+                Shipment.remito_arenera.ilike(f"%{search_q}%"),
+                Shipment.sbe_remito.ilike(f"%{search_q}%"),
+                Shipment.tractor.ilike(f"%{search_q}%")
+            )
+        )
+
+    # --- [NUEVO] FILTRO RANGO LLEGADA SBE ---
+    if arr_start_str:
+        try:
+            d_start = date.fromisoformat(arr_start_str)
+            # Usamos cast(..Date) para ignorar la hora y comparar solo el día
+            q = q.filter(cast(Shipment.sbe_fecha_llegada, Date) >= d_start)
+        except ValueError: pass
+
+    if arr_end_str:
+        try:
+            d_end = date.fromisoformat(arr_end_str)
+            q = q.filter(cast(Shipment.sbe_fecha_llegada, Date) <= d_end)
+        except ValueError: pass
 
     shipments = q.all()
     
@@ -942,7 +979,13 @@ def admin_certificacion():
         areneras=aren_list,
         sel_tid=tid_filter,        
         sel_aid=aid_filter,
-        sel_status=status_filter, # [NUEVO] Enviamos la selección al template
+        sel_status=status_filter,
+        sel_search=search_q,       
+        
+        # Pasamos las nuevas variables al template
+        sel_arr_start=arr_start_str,
+        sel_arr_end=arr_end_str,
+        
         start_date=start_str, 
         end_date=end_str
     )

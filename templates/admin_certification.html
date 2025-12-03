@@ -163,12 +163,24 @@
             </li>
         </ul>
 
-        <form class="d-flex gap-2 flex-wrap" method="GET" action="{{ url_for('admin_certificacion') }}">
+        <form class="d-flex gap-2 flex-wrap align-items-center" method="GET" action="{{ url_for('admin_certificacion') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="view" value="{{ view_mode }}">
             
+            <div class="input-group input-group-sm w-auto">
+                <span class="input-group-text bg-white text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                <input type="text" name="search" class="form-control" placeholder="Buscar remito..." value="{{ sel_search }}" style="width: 130px;">
+            </div>
+
+            <div class="input-group input-group-sm w-auto" title="Filtrar por Fecha de Llegada a SBE (Desde - Hasta)">
+                <span class="input-group-text bg-white text-muted"><i class="fa-solid fa-flag-checkered"></i></span>
+                <input type="date" name="arrival_start" class="form-control" value="{{ sel_arr_start }}" style="max-width: 110px;">
+                <span class="input-group-text bg-light border-start-0 border-end-0 px-1 text-muted">-</span>
+                <input type="date" name="arrival_end" class="form-control" value="{{ sel_arr_end }}" style="max-width: 110px;">
+            </div>
+
             <select name="transportista_id" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
-                <option value="all">Todos Transportistas</option>
+                <option value="all">Todos Transportes</option>
                 {% for t in transportistas %}
                     <option value="{{ t.id }}" {{ 'selected' if sel_tid|string == t.id|string else '' }}>{{ t.username }}</option>
                 {% endfor %}
@@ -182,14 +194,18 @@
             </select>
 
             <select name="status" class="form-select form-select-sm w-auto fw-medium text-primary" onchange="this.form.submit()">
-              <option value="all">Todos los Estados</option>
-              <option value="Pre-Aprobado" {{ 'selected' if sel_status == 'Pre-Aprobado' else '' }}>Pre-Aprobados</option>
-              <option value="Observado" {{ 'selected' if sel_status == 'Observado' else '' }}>Observados</option>
-              <option value="Pendiente" {{ 'selected' if sel_status == 'Pendiente' else '' }}>Pendientes</option>
+                <option value="all">Todos Estados</option>
+                <option value="Pre-Aprobado" {{ 'selected' if sel_status == 'Pre-Aprobado' else '' }}>✅ Pre-Aprobados</option>
+                <option value="Observado" {{ 'selected' if sel_status == 'Observado' else '' }}>⚠️ Observados</option>
+                <option value="Pendiente" {{ 'selected' if sel_status == 'Pendiente' else '' }}>⏳ Pendientes</option>
             </select>
 
-            {% if sel_tid or sel_aid %}
-                <a href="{{ url_for('admin_certificacion', view=view_mode) }}" class="btn btn-sm btn-link text-danger text-decoration-none">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="fa-solid fa-filter"></i>
+            </button>
+
+            {% if sel_tid or sel_aid or sel_status or sel_search or sel_arr_start or sel_arr_end %}
+                <a href="{{ url_for('admin_certificacion', view=view_mode) }}" class="btn btn-sm btn-link text-danger text-decoration-none" title="Limpiar todo">
                     <i class="fa-solid fa-xmark"></i>
                 </a>
             {% endif %}
