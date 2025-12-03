@@ -1447,8 +1447,8 @@ def transportista_arenera(arenera_id):
                 dni     = request.form.get("dni", "").strip()
                 gender  = request.form.get("gender", "M")
                 tipo    = request.form.get("tipo", "")
-                tractor = request.form.get("patente_tractor", "").strip().upper()
-                trailer = request.form.get("patente_batea", "").strip().upper()
+                tractor = request.form.get("patente_tractor", "").strip().upper().replace(" ", "")
+                trailer = request.form.get("patente_batea", "").strip().upper().replace(" ", "")
                 
                 if chofer and dni and tractor:
                     new_ship = Shipment(
