@@ -16,7 +16,6 @@ import time
 from zoneinfo import ZoneInfo
 from xhtml2pdf import pisa
 from flask_wtf.csrf import CSRFProtect  # Protección CSRF
-import emergency_sync_patente
 # ----------------------------
 # CONFIGURACIÓN ZONA HORARIA
 # ----------------------------
@@ -2470,6 +2469,7 @@ def sync_sbe():
 @login_required
 @role_required("admin")
 def sync_sbe_emergency():
+    import emergency_sync_patente
     try:
         # Ejecutamos la lógica del script de emergencia
         emergency_sync_patente.run_emergency_sync()
