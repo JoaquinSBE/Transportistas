@@ -5,7 +5,7 @@ import os
 import io, csv
 from datetime import datetime, date, timedelta
 from functools import wraps
-from sqlalchemy import func, case, text
+from sqlalchemy import func, case, text, cast, Date
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -679,17 +679,21 @@ def todos_camiones():
         dfrom=dfrom_str, dto=dto_str
     )
 
+# --- Asegúrate de tener estos imports al inicio de app.py o dentro de la función ---
+from sqlalchemy import cast, Date
+
 @app.post("/admin/dashboard_data")
 @login_required
 @role_required("admin", "gestion")
 @csrf.exempt 
 def admin_dashboard_data():
-    # --- A. FILTROS Y CONSULTA ---
+    # --- A. FILTROS Y CONSULTA GENERAL ---
     data = request.get_json(silent=True) or {}
     dfrom, dto = _resolve_range(data)
     arenera_id = data.get("arenera_id")
     
-    # Query Base: Traemos todo lo que esté en el rango de fechas
+    # 1. QUERY GENERAL (Para KPIs, Listas y Tablas)
+    # Mantenemos esta lógica para listar los viajes iniciados en el periodo
     base_q = db.session.query(Shipment).filter(Shipment.date >= dfrom, Shipment.date <= dto)
     
     if arenera_id and str(arenera_id) != "all":
@@ -697,116 +701,141 @@ def admin_dashboard_data():
     
     all_ships = base_q.all()
 
+    # --- B. LÓGICA DE CHART (GRÁFICO CORREGIDO) ---
+    # En lugar de usar 'all_ships', hacemos dos consultas independientes para llenar el gráfico correctamente.
+    
+    # Inicializar el eje X (Fechas)
+    hoy_arg = get_arg_today()
+    fecha_corte = min(dto, hoy_arg)
+    delta_days = (fecha_corte - dfrom).days
+    if delta_days < 0: delta_days = -1
+
+    daily_stats = {}
+    for i in range(delta_days + 1):
+        day_loop = dfrom + timedelta(days=i)
+        daily_stats[day_loop.isoformat()] = {"out": 0.0, "in": 0.0}
+
+    # 1. Consulta DESPACHADO (Eje fecha = Fecha Salida)
+    q_out = db.session.query(
+        Shipment.date, 
+        func.sum(Shipment.peso_neto_arenera)
+    ).filter(
+        Shipment.date >= dfrom, 
+        Shipment.date <= fecha_corte
+    )
+    if arenera_id and str(arenera_id) != "all":
+        q_out = q_out.filter(Shipment.arenera_id == int(arenera_id))
+    
+    results_out = q_out.group_by(Shipment.date).all()
+    
+    for r_date, r_sum in results_out:
+        d_str = r_date.isoformat()
+        if d_str in daily_stats:
+            daily_stats[d_str]["out"] = float(r_sum or 0)
+
+    # 2. Consulta RECIBIDO (Eje fecha = Fecha LLEGADA SBE) [CORRECCIÓN AQUI]
+    # Aquí filtramos por fecha de llegada, independiente de cuándo salió
+    q_in = db.session.query(
+        cast(Shipment.sbe_fecha_llegada, Date), 
+        func.sum(Shipment.sbe_peso_neto) # Usamos el peso SBE
+    ).filter(
+        cast(Shipment.sbe_fecha_llegada, Date) >= dfrom,
+        cast(Shipment.sbe_fecha_llegada, Date) <= fecha_corte
+    )
+    if arenera_id and str(arenera_id) != "all":
+        q_in = q_in.filter(Shipment.arenera_id == int(arenera_id))
+
+    results_in = q_in.group_by(cast(Shipment.sbe_fecha_llegada, Date)).all()
+
+    for r_date, r_sum in results_in:
+        if r_date: # Puede ser None si hay error de datos
+            d_str = r_date.isoformat()
+            if d_str in daily_stats:
+                daily_stats[d_str]["in"] = float(r_sum or 0)
+
+
+    # --- C. RESTO DE LA LÓGICA (KPIs, Listas, etc.) ---
+    # Usamos all_ships (Base de Salidas) para el resto de las estadísticas
+    
     conf = get_config()
     tol_tn = conf.tolerance_kg / 1000.0
 
-    # --- B. LÓGICA DE ESTADOS (KPIs DE LOGÍSTICA) ---
-    ships_to_source = [
-        s for s in all_ships 
-        if (not s.peso_neto_arenera or s.peso_neto_arenera == 0) 
-        and not s.sbe_fecha_llegada
-    ]
-    count_to_source = len(ships_to_source)
-
-    ships_to_dest = [
-        s for s in all_ships 
-        if (s.peso_neto_arenera and s.peso_neto_arenera > 0) 
-        and not s.sbe_fecha_llegada
-    ]
-    count_to_dest = len(ships_to_dest)
-    tn_to_dest    = sum(s.peso_neto_arenera for s in ships_to_dest)
-
+    ships_to_source = [s for s in all_ships if (not s.peso_neto_arenera or s.peso_neto_arenera == 0) and not s.sbe_fecha_llegada]
+    ships_to_dest = [s for s in all_ships if (s.peso_neto_arenera and s.peso_neto_arenera > 0) and not s.sbe_fecha_llegada]
     ships_arrived = [s for s in all_ships if s.sbe_fecha_llegada is not None]
-    count_arrived = len(ships_arrived)
-    tn_arrived    = sum(s.final_peso or s.sbe_peso_neto or 0 for s in ships_arrived)
     
+    count_to_source = len(ships_to_source)
+    count_to_dest = len(ships_to_dest)
+    tn_to_dest    = sum(s.peso_neto_arenera or 0 for s in ships_to_dest)
+    count_arrived = len(ships_arrived)
+    
+    # OJO: Para el KPI de "Tn Llegadas" en la tarjeta, es mejor usar la suma real del gráfico (lo que llegó en este periodo)
+    # en lugar de "lo que llegó de los camiones que salieron en este periodo".
+    # Sumamos todo lo del gráfico IN:
+    tn_arrived_periodo = sum(v["in"] for v in daily_stats.values())
+
     total_viajes = len(all_ships)
     total_moving = count_to_source + count_to_dest
     tn_despachadas_total = sum(s.peso_neto_arenera or 0 for s in all_ships)
 
-    # --- C. CÁLCULOS FINANCIEROS Y GRÁFICOS ---
-    daily_stats = {}
     payments_detail = []
     arenera_volumen = {}
     top_trans_map = {}
     total_costo_proyectado = 0.0
 
     for s in all_ships:
-        # 1. Gráfico Diario (Volumen físico real por día de salida)
-        d_str = s.date.isoformat()
-        if d_str not in daily_stats: daily_stats[d_str] = {"out": 0.0, "in": 0.0}
-        
-        w_out = s.peso_neto_arenera or 0
-        w_in  = s.final_peso or s.sbe_peso_neto or 0
-        
-        daily_stats[d_str]["out"] += w_out
-        daily_stats[d_str]["in"]  += w_in
-
-        # 2. Rankings
+        # Rankings (Usamos base salida)
         a_name = s.arenera.username
-        arenera_volumen[a_name] = arenera_volumen.get(a_name, 0) + w_out
+        arenera_volumen[a_name] = arenera_volumen.get(a_name, 0) + (s.peso_neto_arenera or 0)
         
         t_name = s.transportista.username
-        top_trans_map[t_name] = top_trans_map.get(t_name, 0) + w_in
+        w_trans = s.final_peso or s.sbe_peso_neto or 0
+        top_trans_map[t_name] = top_trans_map.get(t_name, 0) + w_trans
 
-        # 3. CÁLCULO DE DINERO (Estimación para KPI "Total Proyectado")
-        
-        # Determinamos si usamos valores congelados (ya certificado) o actuales (estimación)
+        # Cálculos Dinero (Igual que antes)
         neto_flete = 0.0
         neto_arena = 0.0
         
-        # --- CÁLCULO FLETE ---
-        if w_in > 0: # Solo si hay peso de llegada (o SBE)
+        val_w_in = s.final_peso or s.sbe_peso_neto or 0
+        val_w_out = s.peso_neto_arenera or 0
+
+        if val_w_in > 0:
             if s.frozen_flete_neto is not None:
                 neto_flete = s.frozen_flete_neto
             else:
-                # Estimación al vuelo
                 price_flete = s.transportista.custom_price or 0
                 price_arena_ref = s.arenera.custom_price or 0
-                tn_base = w_out if s.arenera.cert_type == 'salida' else w_in
+                tn_base = val_w_out if s.arenera.cert_type == 'salida' else val_w_in
                 merma_money = 0.0
                 if s.arenera.cert_type != 'salida':
-                    diff = w_out - w_in
+                    diff = val_w_out - val_w_in
                     if diff > tol_tn: merma_money = (diff - tol_tn) * price_arena_ref
                 neto_flete = (tn_base * price_flete) - merma_money
         
         iva_flete = max(0, neto_flete * 1.21)
-        total_costo_proyectado += iva_flete # Sumamos al KPI global aunque no esté certificado
+        total_costo_proyectado += iva_flete
 
-        # --- CÁLCULO ARENA ---
-        if w_out > 0:
+        if val_w_out > 0:
             p_arena = s.frozen_arena_price if s.frozen_arena_price is not None else (s.arenera.custom_price or 0)
-            neto_arena = w_out * p_arena
+            neto_arena = val_w_out * p_arena
         
         iva_arena = max(0, neto_arena * 1.21)
-        total_costo_proyectado += iva_arena # Sumamos al KPI global
+        total_costo_proyectado += iva_arena
 
-        # 4. LISTA DE VENCIMIENTOS (Solo lo CERTIFICADO)
-        # Aquí está la corrección: Solo agregamos a la lista si tiene fecha firme de certificación.
         if s.cert_status == "Certificado" and s.cert_fecha:
-            
-            # A. Pago Flete
             if iva_flete > 0:
                 d_pay = s.cert_fecha + timedelta(days=(s.transportista.payment_days or 30))
                 payments_detail.append({
-                    "raw": d_pay, 
-                    "fecha": d_pay.strftime("%d/%m/%Y"),
-                    "monto": iva_flete, 
-                    "entidad": s.transportista.username, 
-                    "tipo": "Flete",
-                    "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()] # <--- CORREGIDO: dia_semana
+                    "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
+                    "monto": iva_flete, "entidad": s.transportista.username, "tipo": "Flete",
+                    "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()]
                 })
-
-            # B. Pago Arena
             if iva_arena > 0:
                 d_pay = s.cert_fecha + timedelta(days=(s.arenera.payment_days or 30))
                 payments_detail.append({
-                    "raw": d_pay, 
-                    "fecha": d_pay.strftime("%d/%m/%Y"),
-                    "monto": iva_arena, 
-                    "entidad": s.arenera.username, 
-                    "tipo": "Arena",
-                    "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()] # <--- CORREGIDO: dia_semana
+                    "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
+                    "monto": iva_arena, "entidad": s.arenera.username, "tipo": "Arena",
+                    "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()]
                 })
 
     # --- D. PREPARAR JSON FINAL ---
@@ -815,17 +844,14 @@ def admin_dashboard_data():
     data_out = [daily_stats[d]["out"] for d in sorted_days]
     data_in  = [daily_stats[d]["in"]  for d in sorted_days]
 
-    # Agrupar pagos para la lista
     pay_map = {}
     for p in payments_detail:
         k = f"{p['raw']}_{p['entidad']}_{p['tipo']}"
-        if k not in pay_map:
-            pay_map[k] = {**p, "count": 0, "monto": 0}
+        if k not in pay_map: pay_map[k] = {**p, "count": 0, "monto": 0}
         pay_map[k]["monto"] += p["monto"]
         pay_map[k]["count"] += 1
     
     payments_final = sorted(pay_map.values(), key=lambda x: x["raw"])
-
     sorted_areneras = sorted(arenera_volumen.items(), key=lambda x: x[1], reverse=True)
     sorted_trans = sorted(top_trans_map.items(), key=lambda x: x[1], reverse=True)[:5]
 
@@ -838,7 +864,7 @@ def admin_dashboard_data():
             "tn_to_dest": tn_to_dest,
             "arrived": count_arrived,
             "tn_out": tn_despachadas_total,
-            "tn_in": tn_arrived,
+            "tn_in": tn_arrived_periodo, # USAMOS EL VALOR REAL DE LLEGADA
             "costo_total": total_costo_proyectado
         },
         "chart_data": { "labels": chart_labels, "out": data_out, "in": data_in },
