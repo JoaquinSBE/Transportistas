@@ -164,6 +164,13 @@
                 {% endfor %}
             </select>
 
+            <select name="status" class="form-select form-select-sm w-auto fw-medium text-primary" onchange="this.form.submit()">
+              <option value="all">Todos los Estados</option>
+              <option value="Pre-Aprobado" {{ 'selected' if sel_status == 'Pre-Aprobado' else '' }}>Pre-Aprobados</option>
+              <option value="Observado" {{ 'selected' if sel_status == 'Observado' else '' }}>Observados</option>
+              <option value="Pendiente" {{ 'selected' if sel_status == 'Pendiente' else '' }}>Pendientes</option>
+            </select>
+
             {% if sel_tid or sel_aid %}
                 <a href="{{ url_for('admin_certificacion', view=view_mode) }}" class="btn btn-sm btn-link text-danger text-decoration-none">
                     <i class="fa-solid fa-xmark"></i>
@@ -238,13 +245,6 @@
                 <!-- Bloque Inferior: Logística SBE -->
                 {% if s.sbe_fecha_salida or s.sbe_fecha_llegada %}
                 <div class="logistics-box">
-                    {% if s.sbe_fecha_salida %}
-                    <div class="logistics-row" title="Salida Real Arenera">
-                        <span><i class="fa-solid fa-truck-ramp-box me-1 text-xs"></i>Sal</span>
-                        <strong>{{ s.sbe_fecha_salida.strftime('%d/%m %H:%M') }}</strong>
-                    </div>
-                    {% endif %}
-                    
                     <div class="logistics-row" title="Llegada Real Planta">
                         <span><i class="fa-solid fa-flag-checkered me-1 text-xs"></i>Lleg</span>
                         {% if s.sbe_fecha_llegada %}

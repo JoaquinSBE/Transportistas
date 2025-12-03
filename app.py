@@ -864,6 +864,10 @@ def admin_certificacion():
     view_mode  = request.args.get("view", "pendiente")
     tid_filter = request.args.get("transportista_id")
     aid_filter = request.args.get("arenera_id")
+    
+    # [NUEVO] Capturamos el filtro de estado
+    status_filter = request.args.get("status") 
+
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
     
@@ -892,10 +896,15 @@ def admin_certificacion():
             q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date)
         q = q.order_by(case((Shipment.cert_status == "Observado", 1), else_=2), Shipment.date.desc())
 
+    # Filtros existentes
     if tid_filter and tid_filter != "all":
         q = q.filter(Shipment.transportista_id == int(tid_filter))
     if aid_filter and aid_filter != "all":
         q = q.filter(Shipment.arenera_id == int(aid_filter))
+
+    # [NUEVO] Aplicar filtro de Estado
+    if status_filter and status_filter != "all":
+        q = q.filter(Shipment.cert_status == status_filter)
 
     shipments = q.all()
     
@@ -907,6 +916,7 @@ def admin_certificacion():
         areneras=aren_list,
         sel_tid=tid_filter,        
         sel_aid=aid_filter,
+        sel_status=status_filter, # [NUEVO] Enviamos la selección al template
         start_date=start_str, 
         end_date=end_str
     )
