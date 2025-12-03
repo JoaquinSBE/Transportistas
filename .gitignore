@@ -18,3 +18,10 @@ pgdata-dev/
 app2.py
 fix_remitos_viejos.py
 # logearse: gh auth login
+
+fix_remitos_viejos.py
+fix_patentes.py
+reset_admin.py
+reset_certificados.py
+undo_bad_sync.py
+reset_certificados_by_remito.py
