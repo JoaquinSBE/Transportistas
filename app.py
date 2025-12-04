@@ -1083,6 +1083,99 @@ def corregir_sbe(shipment_id):
     flash("Datos corregidos. Fechas ajustadas automáticamente.", "success")
     return redirect(url_for("admin_certificacion"))
 
+@app.post("/admin/certificar_masivo")
+@login_required
+@role_required("admin")
+def certify_batch():
+    # 1. Recuperar Filtros Actuales (para saber qué certificar)
+    tid_filter = request.form.get("transportista_id")
+    aid_filter = request.form.get("arenera_id")
+    start_str  = request.form.get("start")
+    end_str    = request.form.get("end")
+    
+    # 2. Construir la Query (Idéntica a la vista)
+    q = Shipment.query.filter(Shipment.cert_status == "Pre-Aprobado") # SOLO LOS VERDES
+
+    # Filtro Fechas
+    if start_str and end_str:
+        try:
+            s_date = date.fromisoformat(start_str)
+            e_date = date.fromisoformat(end_str)
+            q = q.filter(Shipment.date >= s_date, Shipment.date <= e_date)
+        except ValueError: pass
+
+    # Filtro Empresas
+    if tid_filter and tid_filter != "all":
+        q = q.filter(Shipment.transportista_id == int(tid_filter))
+    if aid_filter and aid_filter != "all":
+        q = q.filter(Shipment.arenera_id == int(aid_filter))
+
+    targets = q.all()
+    
+    if not targets:
+        flash("No hay viajes 'Pre-Aprobados' en el rango seleccionado para certificar.", "info")
+        return redirect(url_for('admin_certificacion', **request.args))
+
+    # 3. Procesamiento Masivo
+    count = 0
+    conf = get_config()
+    tol_tn = conf.tolerance_kg / 1000.0
+    hoy = get_arg_today()
+
+    for s in targets:
+        # A. Datos Finales
+        s.final_remito = s.sbe_remito
+        s.final_peso   = s.sbe_peso_neto
+        
+        # B. Precios
+        price_flete = s.transportista.custom_price or 0
+        price_arena = s.arenera.custom_price or 0
+        
+        # C. Cálculo de Merma y Neto
+        peso_salida = s.peso_neto_arenera or 0
+        peso_final  = s.final_peso or 0
+        
+        merma_money = 0.0
+        tn_base_flete = 0.0
+
+        if s.arenera.cert_type == 'salida':
+            tn_base_flete = peso_salida
+        else:
+            tn_base_flete = peso_final
+            diff = peso_salida - peso_final
+            if diff > tol_tn:
+                excess = diff - tol_tn
+                merma_money = excess * price_arena
+
+        flete_neto = (tn_base_flete * price_flete) - merma_money
+        flete_iva  = max(0, flete_neto * 1.21)
+
+        # D. Congelar Valores
+        s.frozen_flete_price = price_flete
+        s.frozen_arena_price = price_arena
+        s.frozen_merma_money = merma_money
+        s.frozen_flete_neto  = flete_neto
+        s.frozen_flete_iva   = flete_iva
+
+        # E. Cerrar Viaje
+        s.cert_status = "Certificado"
+        s.cert_fecha  = hoy
+        if s.status != "Llego": 
+            s.status = "Llego"
+            
+        count += 1
+
+    db.session.commit()
+    flash(f"✅ Éxito: Se certificaron masivamente {count} viajes.", "success")
+    
+    # Redirigir manteniendo los filtros visuales
+    return redirect(url_for('admin_certificacion', 
+                            transportista_id=tid_filter, 
+                            arenera_id=aid_filter, 
+                            start=start_str, 
+                            end=end_str,
+                            view='pendiente'))
+
 @app.route("/transportista/panel")
 @login_required
 @role_required("transportista")
