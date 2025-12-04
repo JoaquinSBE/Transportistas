@@ -1087,16 +1087,23 @@ def corregir_sbe(shipment_id):
 @login_required
 @role_required("admin")
 def certify_batch():
-    # 1. Recuperar Filtros Actuales (para saber qué certificar)
+    # 1. Recuperar TODOS los Filtros del formulario
     tid_filter = request.form.get("transportista_id")
     aid_filter = request.form.get("arenera_id")
     start_str  = request.form.get("start")
     end_str    = request.form.get("end")
     
-    # 2. Construir la Query (Idéntica a la vista)
-    q = Shipment.query.filter(Shipment.cert_status == "Pre-Aprobado") # SOLO LOS VERDES
+    # [NUEVOS FILTROS]
+    search_q      = request.form.get("search")
+    arr_start_str = request.form.get("arrival_start")
+    arr_end_str   = request.form.get("arrival_end")
+    
+    # 2. Construir la Query Base (Solo Pre-Aprobados)
+    q = Shipment.query.filter(Shipment.cert_status == "Pre-Aprobado")
 
-    # Filtro Fechas
+    # --- APLICAR FILTROS (Idéntico a la vista principal) ---
+
+    # A. Fechas de Salida (Viaje)
     if start_str and end_str:
         try:
             s_date = date.fromisoformat(start_str)
@@ -1104,16 +1111,39 @@ def certify_batch():
             q = q.filter(Shipment.date >= s_date, Shipment.date <= e_date)
         except ValueError: pass
 
-    # Filtro Empresas
+    # B. Empresas
     if tid_filter and tid_filter != "all":
         q = q.filter(Shipment.transportista_id == int(tid_filter))
     if aid_filter and aid_filter != "all":
         q = q.filter(Shipment.arenera_id == int(aid_filter))
 
+    # C. Búsqueda Texto
+    if search_q:
+        q = q.filter(
+            or_(
+                Shipment.remito_arenera.ilike(f"%{search_q}%"),
+                Shipment.sbe_remito.ilike(f"%{search_q}%"),
+                Shipment.tractor.ilike(f"%{search_q}%")
+            )
+        )
+
+    # D. Fechas de Llegada SBE
+    if arr_start_str:
+        try:
+            d_start = date.fromisoformat(arr_start_str)
+            q = q.filter(cast(Shipment.sbe_fecha_llegada, Date) >= d_start)
+        except ValueError: pass
+
+    if arr_end_str:
+        try:
+            d_end = date.fromisoformat(arr_end_str)
+            q = q.filter(cast(Shipment.sbe_fecha_llegada, Date) <= d_end)
+        except ValueError: pass
+
     targets = q.all()
     
     if not targets:
-        flash("No hay viajes 'Pre-Aprobados' en el rango seleccionado para certificar.", "info")
+        flash("No hay viajes 'Pre-Aprobados' que coincidan con los filtros para certificar.", "info")
         return redirect(url_for('admin_certificacion', **request.args))
 
     # 3. Procesamiento Masivo
@@ -1123,15 +1153,13 @@ def certify_batch():
     hoy = get_arg_today()
 
     for s in targets:
-        # A. Datos Finales
+        # Lógica de certificación (Idéntica a la individual)
         s.final_remito = s.sbe_remito
         s.final_peso   = s.sbe_peso_neto
         
-        # B. Precios
         price_flete = s.transportista.custom_price or 0
         price_arena = s.arenera.custom_price or 0
         
-        # C. Cálculo de Merma y Neto
         peso_salida = s.peso_neto_arenera or 0
         peso_final  = s.final_peso or 0
         
@@ -1150,14 +1178,12 @@ def certify_batch():
         flete_neto = (tn_base_flete * price_flete) - merma_money
         flete_iva  = max(0, flete_neto * 1.21)
 
-        # D. Congelar Valores
         s.frozen_flete_price = price_flete
         s.frozen_arena_price = price_arena
         s.frozen_merma_money = merma_money
         s.frozen_flete_neto  = flete_neto
         s.frozen_flete_iva   = flete_iva
 
-        # E. Cerrar Viaje
         s.cert_status = "Certificado"
         s.cert_fecha  = hoy
         if s.status != "Llego": 
@@ -1168,12 +1194,15 @@ def certify_batch():
     db.session.commit()
     flash(f"✅ Éxito: Se certificaron masivamente {count} viajes.", "success")
     
-    # Redirigir manteniendo los filtros visuales
+    # Redirigir manteniendo los filtros visuales (Reconstruimos la URL)
     return redirect(url_for('admin_certificacion', 
                             transportista_id=tid_filter, 
                             arenera_id=aid_filter, 
                             start=start_str, 
                             end=end_str,
+                            search=search_q,
+                            arrival_start=arr_start_str,
+                            arrival_end=arr_end_str,
                             view='pendiente'))
 
 @app.route("/transportista/panel")

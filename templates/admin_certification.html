@@ -142,20 +142,25 @@
               </li>
             </ul>
           </div>
-              <form id="form-mass-cert" action="{{ url_for('certify_batch') }}" method="POST">
+            <form id="form-mass-cert" action="{{ url_for('certify_batch') }}" method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
                 <input type="hidden" name="transportista_id" value="{{ sel_tid or 'all' }}">
                 <input type="hidden" name="arenera_id" value="{{ sel_aid or 'all' }}">
                 <input type="hidden" name="start" value="{{ start_date or '' }}">
                 <input type="hidden" name="end" value="{{ end_date or '' }}">
                 
+                <input type="hidden" name="search" value="{{ sel_search or '' }}">
+                <input type="hidden" name="arrival_start" value="{{ sel_arr_start or '' }}">
+                <input type="hidden" name="arrival_end" value="{{ sel_arr_end or '' }}">
+                
                 <button type="button" class="btn btn-sm btn-success fw-bold shadow-sm" onclick="confirmBatchCert()">
                     <i class="fa-solid fa-check-double me-1"></i> Certificar Todo OK
                 </button>
             </form>
-         <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-outline-secondary">
-            <i class="fa-solid fa-arrow-left me-1"></i> Volver
-         </a>
+            <a href="{{ url_for('admin_panel') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="fa-solid fa-arrow-left me-1"></i> Volver
+            </a>
       </div>
     </div>
   </nav>
