@@ -1,297 +1,588 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es" data-bs-theme="light">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-  <title>Inicio | Transportista</title>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, user-scalable=no"
+    />
+    <title>Inicio | Transportista</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  
-  <style>
-    :root {
-      --bs-font-sans-serif: 'Inter', sans-serif;
-      --bs-primary: #2563eb;
-      --bs-body-bg: #f3f4f6;
-      --bottom-nav-height: 70px;
-    }
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
 
-    body {
-      font-family: var(--bs-font-sans-serif);
-      background-color: var(--bs-body-bg);
-      padding-bottom: calc(var(--bottom-nav-height) + 20px);
-    }
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    /* --- HEADER --- */
-    .app-header {
-      background: #fff;
-      border-bottom: 1px solid #e5e7eb;
-      padding: 1rem;
-      margin-bottom: 1rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .welcome-text { font-size: 1.1rem; font-weight: 700; color: #1f2937; margin: 0; }
-    .date-text { font-size: 0.75rem; color: #6b7280; margin-top: 2px; }
+    <style>
+      :root {
+        --bs-font-sans-serif: "Inter", sans-serif;
+        --bs-primary: #2563eb;
+        --bs-body-bg: #f3f4f6;
+        --bottom-nav-height: 70px;
+      }
 
-    /* --- KPI CARDS --- */
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 1.5rem;
-    }
-    .kpi-card {
-      background: #fff;
-      border-radius: 12px;
-      border: 1px solid #e5e7eb;
-      padding: 12px;
-      text-align: center;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-      transition: transform 0.1s;
-      text-decoration: none;
-      color: inherit;
-    }
-    .kpi-card:active { transform: scale(0.98); }
-    
-    .kpi-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
-    .kpi-value { font-size: 1.4rem; font-weight: 800; color: #1f2937; line-height: 1; }
-    
-    .kpi-warn .kpi-value { color: #d97706; }
-    .kpi-ok .kpi-value { color: #059669; }
-    .kpi-primary { background-color: var(--bs-primary); border-color: var(--bs-primary); color: #fff; }
-    .kpi-primary .kpi-label { color: rgba(255,255,255,0.8); }
-    .kpi-primary .kpi-value { color: #fff; }
+      body {
+        font-family: var(--bs-font-sans-serif);
+        background-color: var(--bs-body-bg);
+        padding-bottom: calc(var(--bottom-nav-height) + 20px);
+      }
 
-    /* --- CUPOS DEL DÍA --- */
-    .section-title { font-size: 0.9rem; font-weight: 700; color: #374151; margin-bottom: 10px; text-transform: uppercase; padding-left: 4px; }
-    
-    .quota-item {
-      background: #fff;
-      border-radius: 12px;
-      padding: 1rem;
-      margin-bottom: 0.8rem;
-      border: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .quota-info { flex-grow: 1; margin-right: 1rem; }
-    .quota-name { font-weight: 700; color: #1f2937; font-size: 1rem; margin-bottom: 4px; }
-    .quota-stats { font-size: 0.75rem; color: #6b7280; display: flex; justify-content: space-between; margin-bottom: 6px; }
-    
-    .progress-custom { height: 6px; background-color: #f1f5f9; border-radius: 3px; overflow: hidden; }
-    .progress-bar-custom { height: 100%; background-color: var(--bs-primary); border-radius: 3px; }
+      /* --- HEADER --- */
+      .app-header {
+        background: #fff;
+        border-bottom: 1px solid #e5e7eb;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .welcome-text {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0;
+      }
+      .date-text {
+        font-size: 0.75rem;
+        color: #6b7280;
+        margin-top: 2px;
+      }
 
-    .btn-load {
-      padding: 0.6rem 1.2rem;
-      font-weight: 700;
-      font-size: 0.85rem;
-      border-radius: 10px;
-      background: var(--bs-primary);
-      color: #fff;
-      border: none;
-      white-space: nowrap;
-      text-decoration: none;
-    }
-    .btn-load.disabled { background: #e5e7eb; color: #9ca3af; pointer-events: none; }
+      /* --- KPI CARDS --- */
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 1.5rem;
+      }
+      .kpi-card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        padding: 12px;
+        text-align: center;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+        transition: transform 0.1s;
+        text-decoration: none;
+        color: inherit;
+      }
+      .kpi-card:active {
+        transform: scale(0.98);
+      }
 
-    /* --- LISTA VIAJES --- */
-    .search-container { margin-bottom: 1rem; }
-    .search-input { border-radius: 10px; padding: 0.7rem 1rem; border: 1px solid #e5e7eb; font-size: 0.9rem; }
-    .search-input:focus { border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+      .kpi-label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #6b7280;
+        margin-bottom: 4px;
+      }
+      .kpi-value {
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: #1f2937;
+        line-height: 1;
+      }
 
-    .trip-card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 1rem;
-      margin-bottom: 0.8rem;
-      border: 1px solid #e5e7eb;
-    }
-    .trip-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
-    .trip-driver { font-weight: 700; color: #1f2937; }
-    .trip-meta { font-size: 0.8rem; color: #6b7280; }
-    
-    .status-pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-    .status-ok { background: #ecfdf5; color: #065f46; }
-    .status-warn { background: #fffbeb; color: #b45309; }
-    
-    .btn-del { border: none; background: transparent; color: #ef4444; padding: 4px; }
+      .kpi-warn .kpi-value {
+        color: #d97706;
+      }
+      .kpi-ok .kpi-value {
+        color: #059669;
+      }
+      .kpi-primary {
+        background-color: var(--bs-primary);
+        border-color: var(--bs-primary);
+        color: #fff;
+      }
+      .kpi-primary .kpi-label {
+        color: rgba(255, 255, 255, 0.8);
+      }
+      .kpi-primary .kpi-value {
+        color: #fff;
+      }
 
-    /* --- BOTTOM NAV --- */
-    .bottom-nav {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      height: var(--bottom-nav-height); background: #fff; border-top: 1px solid #e5e7eb;
-      display: flex; justify-content: space-around; align-items: center; z-index: 1000;
-    }
-    .nav-item-link {
-      display: flex; flex-direction: column; align-items: center;
-      text-decoration: none; color: #9ca3af; font-size: 0.75rem; font-weight: 500;
-    }
-    .nav-item-link i { font-size: 1.5rem; margin-bottom: 4px; }
-    .nav-item-link.active { color: var(--bs-primary); }
-  </style>
-</head>
-<body>
+      /* --- CUPOS DEL DÍA --- */
+      .section-title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #374151;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        padding-left: 4px;
+      }
 
-  <div class="app-header">
-    <div>
+      .quota-item {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 0.8rem;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .quota-info {
+        flex-grow: 1;
+        margin-right: 1rem;
+      }
+      .quota-name {
+        font-weight: 700;
+        color: #1f2937;
+        font-size: 1rem;
+        margin-bottom: 4px;
+      }
+      .quota-stats {
+        font-size: 0.75rem;
+        color: #6b7280;
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
+
+      .progress-custom {
+        height: 6px;
+        background-color: #f1f5f9;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .progress-bar-custom {
+        height: 100%;
+        background-color: var(--bs-primary);
+        border-radius: 3px;
+      }
+
+      .btn-load {
+        padding: 0.6rem 1.2rem;
+        font-weight: 700;
+        font-size: 0.85rem;
+        border-radius: 10px;
+        background: var(--bs-primary);
+        color: #fff;
+        border: none;
+        white-space: nowrap;
+        text-decoration: none;
+      }
+      .btn-load.disabled {
+        background: #e5e7eb;
+        color: #9ca3af;
+        pointer-events: none;
+      }
+
+      /* --- LISTA VIAJES --- */
+      .search-container {
+        margin-bottom: 1rem;
+      }
+      .search-input {
+        border-radius: 10px;
+        padding: 0.7rem 1rem;
+        border: 1px solid #e5e7eb;
+        font-size: 0.9rem;
+      }
+      .search-input:focus {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      }
+
+      .trip-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 0.8rem;
+        border: 1px solid #e5e7eb;
+      }
+      .trip-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+      }
+      .trip-driver {
+        font-weight: 700;
+        color: #1f2937;
+      }
+      .trip-meta {
+        font-size: 0.8rem;
+        color: #6b7280;
+      }
+
+      .status-pill {
+        font-size: 0.7rem;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-weight: 600;
+      }
+      .status-ok {
+        background: #ecfdf5;
+        color: #065f46;
+      }
+      .status-warn {
+        background: #fffbeb;
+        color: #b45309;
+      }
+
+      .btn-del {
+        border: none;
+        background: transparent;
+        color: #ef4444;
+        padding: 4px;
+      }
+
+      /* --- BOTTOM NAV --- */
+      .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: var(--bottom-nav-height);
+        background: #fff;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        z-index: 1000;
+      }
+      .nav-item-link {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-decoration: none;
+        color: #9ca3af;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+      .nav-item-link i {
+        font-size: 1.5rem;
+        margin-bottom: 4px;
+      }
+      .nav-item-link.active {
+        color: var(--bs-primary);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-header">
+      <div>
         <h1 class="welcome-text">Hola, {{ user.username }}</h1>
-        <div class="date-text">{{ (today or get_arg_today()).strftime('%d/%m/%Y') }}</div>
-    </div>
-    <div class="d-flex gap-2">
-        <a href="{{ url_for('change_password') }}" class="btn btn-sm text-secondary" title="Cambiar mi contraseña">
-        <i class="fa-solid fa-gear fa-lg"></i>
+        <div class="date-text">
+          {{ (today or get_arg_today()).strftime('%d/%m/%Y') }}
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a
+          href="{{ url_for('change_password') }}"
+          class="btn btn-sm text-secondary"
+          title="Cambiar mi contraseña"
+        >
+          <i class="fa-solid fa-gear fa-lg"></i>
         </a>
-        <a href="{{ url_for('logout') }}" class="btn btn-sm text-danger fw-medium" title="Cerrar Sesión">
+        <a
+          href="{{ url_for('logout') }}"
+          class="btn btn-sm text-danger fw-medium"
+          title="Cerrar Sesión"
+        >
           <i class="fa-solid fa-arrow-right-from-bracket"></i>
         </a>
+      </div>
     </div>
-  </div>
 
-  <div class="container-xl px-3">
-
-    <div class="kpi-grid">
+    <div class="container-xl px-3">
+      <div class="kpi-grid">
         <div class="kpi-card kpi-warn">
-            <div class="kpi-label">En Viaje</div>
-            <div class="kpi-value">{{ stats.en_viaje }}</div>
+          <div class="kpi-label">En Viaje</div>
+          <div class="kpi-value">{{ stats.en_viaje }}</div>
         </div>
         <div class="kpi-card kpi-ok">
-            <div class="kpi-label">Llegados</div>
-            <div class="kpi-value">{{ stats.llegados }}</div>
+          <div class="kpi-label">Llegados</div>
+          <div class="kpi-value">{{ stats.llegados }}</div>
         </div>
-        <a href="{{ url_for('transportista_choferes') }}" class="kpi-card kpi-primary">
-            <div class="kpi-label">Choferes</div>
-            <div class="kpi-value"><i class="fa-solid fa-users"></i></div>
+        <a
+          href="{{ url_for('transportista_choferes') }}"
+          class="kpi-card kpi-primary"
+        >
+          <div class="kpi-label">Choferes</div>
+          <div class="kpi-value"><i class="fa-solid fa-users"></i></div>
         </a>
-    </div>
+      </div>
 
-    <div class="mb-4">
+      <div class="mb-4">
         <h6 class="section-title">Cupos Disponibles Hoy</h6>
-        {% if assignments %}
-            {% for it in assignments %}
-                {% set used = it.daily_used or 0 %}
-                {% set lim  = it.daily_limit or 0 %}
-                {% set pct  = 0 if lim == 0 else (100*used//lim if used <= lim else 100) %}
-                
-                <div class="quota-item">
-                    <div class="quota-info">
-                        <div class="quota-name">{{ it.arenera.username }}</div>
-                        <div class="quota-stats">
-                            <span>{{ used }} / {{ lim }} camiones</span>
-                            <span>{{ pct }}%</span>
-                        </div>
-                        <div class="progress-custom">
-                            <div class="progress-bar-custom" style="width: {{ pct }}%"></div>
-                        </div>
-                    </div>
-                    <a href="{{ url_for('transportista_arenera', arenera_id=it.arenera.id) }}" 
-                       class="btn-load {{ 'disabled' if lim > 0 and used >= lim else '' }}">
-                        Cargar
-                    </a>
-                </div>
-            {% endfor %}
-        {% else %}
-            <div class="text-center py-4 bg-white border rounded-3">
-                <p class="text-muted m-0 small">No tienes cupos asignados para hoy.</p>
-            </div>
-        {% endif %}
-    </div>
+        {% if assignments %} {% for it in assignments %} {% set used =
+        it.daily_used or 0 %} {% set lim = it.daily_limit or 0 %} {% set pct = 0
+        if lim == 0 else (100*used//lim if used <= lim else 100) %}
 
-    <div>
+        <div class="quota-item">
+          <div class="quota-info">
+            <div class="quota-name">{{ it.arenera.username }}</div>
+            <div class="quota-stats">
+              <span>{{ used }} / {{ lim }} camiones</span>
+              <span>{{ pct }}%</span>
+            </div>
+            <div class="progress-custom">
+              <div class="progress-bar-custom" style="width: {{ pct }}%"></div>
+            </div>
+          </div>
+          <a
+            href="{{ url_for('transportista_arenera', arenera_id=it.arenera.id) }}"
+            class="btn-load {{ 'disabled' if lim > 0 and used >= lim else '' }}"
+          >
+            Cargar
+          </a>
+        </div>
+        {% endfor %} {% else %}
+        <div class="text-center py-4 bg-white border rounded-3">
+          <p class="text-muted m-0 small">
+            No tienes cupos asignados para hoy.
+          </p>
+        </div>
+        {% endif %}
+      </div>
+
+      <div>
         <h6 class="section-title">Mis Viajes ({{ envios|length }})</h6>
-        
+
         <div class="search-container">
-            <input type="text" id="q" class="form-control search-input" placeholder="Buscar chofer, patente...">
+          <input
+            type="text"
+            id="q"
+            class="form-control search-input"
+            placeholder="Buscar chofer, patente..."
+          />
         </div>
 
         <div id="lista-viajes">
-            {% if envios %}
-                {% for s in envios %}
-                <div class="trip-card" data-search="{{ (s.chofer ~ ' ' ~ s.dni ~ ' ' ~ s.tractor)|lower }}">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="trip-driver">{{ s.chofer }}</div>
-                            <div class="trip-meta">{{ s.arenera.username }} • {{ s.tractor }}</div>
-                            <div class="trip-meta text-muted small mt-1">{{ s.date.strftime('%d/%m') }} • {{ s.tipo }}</div>
-                        </div>
-                        
-                        <div class="text-end">
-                            {% if s.status == 'Llego' %}
-                                <span class="status-pill status-ok">Llegó</span>
-                            {% else %}
-                                <span class="status-pill status-warn d-block mb-1">En Viaje</span>
-                                <form method="post" action="{{ url_for('delete_own_shipment', ship_id=s.id) }}" 
-                                      onsubmit="return confirm('¿Eliminar este viaje?');">
-                                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <button type="submit" class="btn-del"><i class="fa-solid fa-trash"></i></button>
-                                </form>
-                            {% endif %}
-                        </div>
-                    </div>
+          {% if envios %} {% for s in envios %}
+          <div
+            class="trip-card"
+            data-search="{{ (s.chofer ~ ' ' ~ s.dni ~ ' ' ~ s.tractor)|lower }}"
+          >
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="trip-driver">{{ s.chofer }}</div>
+                <div class="trip-meta">
+                  {{ s.arenera.username }} • {{ s.tractor }}
                 </div>
-                {% endfor %}
-            {% else %}
-                <div class="text-center py-5 text-muted opacity-50">
-                    <i class="fa-solid fa-route fa-2x mb-2"></i>
-                    <p class="small">Aún no has cargado viajes.</p>
+                <div class="trip-meta text-muted small mt-1">
+                  {{ s.date.strftime('%d/%m') }} • {{ s.tipo }}
                 </div>
-            {% endif %}
+              </div>
+
+              <div class="text-end">
+                {% if s.status == 'Llego' %}
+                <span class="status-pill status-ok">Llegó</span>
+                {% else %}
+                <span class="status-pill status-warn d-block mb-1"
+                  >En Viaje</span
+                >
+
+                <div
+                  class="d-flex justify-content-end align-items-center gap-2"
+                >
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-light text-primary border-0"
+                    onclick="openEditModal('{{ s.id }}', '{{ s.chofer }}', '{{ s.dni }}', '{{ s.tractor }}', '{{ s.trailer }}', '{{ s.tipo }}')"
+                    title="Editar datos"
+                  >
+                    <i class="fa-solid fa-pencil"></i>
+                  </button>
+
+                  <form
+                    method="post"
+                    action="{{ url_for('delete_own_shipment', ship_id=s.id) }}"
+                    onsubmit="return confirm('¿Eliminar este viaje?');"
+                    class="m-0 p-0"
+                  >
+                    <input
+                      type="hidden"
+                      name="csrf_token"
+                      value="{{ csrf_token() }}"
+                    />
+                    <button type="submit" class="btn-del">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </form>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %} {% else %}
+          <div class="text-center py-5 text-muted opacity-50">
+            <i class="fa-solid fa-route fa-2x mb-2"></i>
+            <p class="small">Aún no has cargado viajes.</p>
+          </div>
+          {% endif %}
         </div>
+      </div>
     </div>
 
-  </div>
-
-  <nav class="bottom-nav">
-    <a href="{{ url_for('transportista_panel') }}" class="nav-item-link active">
+    <nav class="bottom-nav">
+      <a
+        href="{{ url_for('transportista_panel') }}"
+        class="nav-item-link active"
+      >
         <i class="fa-solid fa-house"></i><span>Inicio</span>
-    </a>
-    <a href="{{ url_for('transportista_quotas') }}" class="nav-item-link">
+      </a>
+      <a href="{{ url_for('transportista_quotas') }}" class="nav-item-link">
         <i class="fa-solid fa-calendar-check"></i><span>Cupos</span>
-    </a>
-    <a href="{{ url_for('transportista_history') }}" class="nav-item-link">
+      </a>
+      <a href="{{ url_for('transportista_history') }}" class="nav-item-link">
         <i class="fa-solid fa-clock-rotate-left"></i><span>Historial</span>
-    </a>
-  </nav>
+      </a>
+    </nav>
+    <div
+      class="modal fade"
+      id="editShipmentModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form id="formEditShipment" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 
-  <script>
-    // Buscador JS
-    document.addEventListener('DOMContentLoaded', () => {
-        const input = document.getElementById('q');
-        const list = document.getElementById('lista-viajes');
-        
-        if(input && list) {
-            input.addEventListener('input', () => {
-                const term = input.value.trim().toLowerCase();
-                Array.from(list.children).forEach(card => {
-                    const text = card.getAttribute('data-search') || '';
-                    card.style.display = text.includes(term) ? '' : 'none';
-                });
-            });
-        }
+            <div class="modal-header">
+              <h5 class="modal-title">✏️ Editar Viaje</h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Cerrar"
+              ></button>
+            </div>
 
-        // Flash Messages
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    Swal.fire({
-                        toast: true, position: 'top',
-                        icon: "{{ 'success' if category in ['ok','success'] else 'info' }}",
-                        title: "{{ message }}", showConfirmButton: false, timer: 3000
-                    });
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-    });
-  </script>
+            <div class="modal-body text-start">
+              <div class="mb-3">
+                <label class="form-label">Chofer</label>
+                <input
+                  type="text"
+                  name="chofer"
+                  id="edit_chofer"
+                  class="form-control"
+                  required
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">DNI</label>
+                <input
+                  type="text"
+                  name="dni"
+                  id="edit_dni"
+                  class="form-control"
+                  required
+                />
+              </div>
+              <div class="row">
+                <div class="col-6 mb-3">
+                  <label class="form-label">Patente Tractor</label>
+                  <input
+                    type="text"
+                    name="tractor"
+                    id="edit_tractor"
+                    class="form-control text-uppercase"
+                    required
+                  />
+                </div>
+                <div class="col-6 mb-3">
+                  <label class="form-label">Patente Batea</label>
+                  <input
+                    type="text"
+                    name="trailer"
+                    id="edit_trailer"
+                    class="form-control text-uppercase"
+                  />
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Tipo Camión</label>
+                <select name="tipo" id="edit_tipo" class="form-select">
+                  <option value="Batea">Batea</option>
+                  <option value="Bivuelco">Bivuelco</option>
+                </select>
+              </div>
+            </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-dismiss="modal"
+              >
+                Cancelar
+              </button>
+              <button type="submit" class="btn btn-primary">
+                Guardar Cambios
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <script>
+                  // Buscador JS
+                  document.addEventListener('DOMContentLoaded', () => {
+                      const input = document.getElementById('q');
+                      const list = document.getElementById('lista-viajes');
+
+                      if(input && list) {
+                          input.addEventListener('input', () => {
+                              const term = input.value.trim().toLowerCase();
+                              Array.from(list.children).forEach(card => {
+                                  const text = card.getAttribute('data-search') || '';
+                                  card.style.display = text.includes(term) ? '' : 'none';
+                              });
+                          });
+                      }
+
+                      // Flash Messages
+                      {% with messages = get_flashed_messages(with_categories=true) %}
+                          {% if messages %}
+                              {% for category, message in messages %}
+                                  Swal.fire({
+                                      toast: true, position: 'top',
+                                      icon: "{{ 'success' if category in ['ok','success'] else 'info' }}",
+                                      title: "{{ message }}", showConfirmButton: false, timer: 3000
+                                  });
+                              {% endfor %}
+                          {% endif %}
+                      {% endwith %}
+                  });
+      function openEditModal(id, chofer, dni, tractor, trailer, tipo) {
+          // 1. Llenar los campos de texto
+          document.getElementById('edit_chofer').value = chofer;
+          document.getElementById('edit_dni').value = dni;
+          document.getElementById('edit_tractor').value = tractor;
+          document.getElementById('edit_trailer').value = trailer;
+
+          // 2. [CLAVE] Seleccionar el tipo que ya tenía cargado
+          // Esta línea obliga al selector a ponerse en "Bivuelco" si el dato es "Bivuelco"
+          document.getElementById('edit_tipo').value = tipo;
+
+          // 3. Configurar la acción del formulario para guardar en el ID correcto
+          const form = document.getElementById('formEditShipment');
+          // Asegúrate que esta ruta coincida con la de tu app.py
+          form.action = `/transportista/shipment/${id}/edit`;
+
+          // 4. Mostrar el modal
+          const modal = new bootstrap.Modal(document.getElementById('editShipmentModal'));
+          modal.show();
+      }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
 </html>

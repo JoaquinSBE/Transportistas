@@ -989,6 +989,34 @@ def admin_certificacion():
         end_date=end_str
     )
 
+@app.post("/transportista/shipment/<int:ship_id>/edit")
+@login_required
+@role_required("transportista")
+def edit_own_shipment(ship_id):
+    s = Shipment.query.get_or_404(ship_id)
+    
+    # 1. Seguridad: Que sea su viaje
+    if s.transportista_id != session.get("user_id"):
+        abort(403)
+        
+    # 2. Seguridad: Que no haya llegado aún
+    if s.status != "En viaje":
+        flash("Solo se pueden editar viajes que estén 'En viaje'.", "error")
+        return redirect(request.referrer)
+
+    # 3. Actualizar datos
+    # Usamos .upper().replace(" ", "") para mantener la higiene de las patentes
+    s.chofer  = request.form.get("chofer", s.chofer).strip()
+    s.dni     = request.form.get("dni", s.dni).strip()
+    s.tractor = request.form.get("tractor", s.tractor).strip().upper().replace(" ", "")
+    s.trailer = request.form.get("trailer", s.trailer).strip().upper().replace(" ", "")
+    s.tipo    = request.form.get("tipo", s.tipo)
+
+    db.session.commit()
+    flash(f"Viaje #{s.id} actualizado correctamente.", "success")
+    
+    return redirect(request.referrer)
+
 @app.post("/admin/certificar/<int:shipment_id>")
 @login_required
 @role_required("admin")
