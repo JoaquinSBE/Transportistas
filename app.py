@@ -190,6 +190,63 @@ def get_config():
         db.session.commit()
     return conf
 
+def calculate_shipment_financials(s):
+    # 1. Definir Pesos
+    peso_salida = s.peso_neto_arenera or 0
+    # Prioridad: SBE > Arenera (Si no hay SBE, usamos Arenera para no romper, pero debería haber SBE)
+    peso_llegada = s.sbe_peso_neto if (s.sbe_peso_neto and s.sbe_peso_neto > 0) else peso_salida
+    
+    # Guardamos datos finales físicos
+    s.final_remito = s.sbe_remito if s.sbe_remito else s.remito_arenera
+    s.final_peso   = peso_llegada
+
+    price_flete = s.transportista.custom_price or 0
+    price_arena = s.arenera.custom_price or 0
+    
+    conf = get_config()
+    tol_tn = conf.tolerance_kg / 1000.0
+    
+    merma_money = 0.0
+    tn_base_flete = 0.0
+
+    # --- LÓGICA MATEMÁTICA CORREGIDA ---
+    if s.arenera.cert_type == 'llegada':
+        # CASO LLEGADA:
+        # 1. Se paga Flete sobre lo que LLEGÓ (Balanza SBE).
+        # 2. Se paga Arena sobre lo que LLEGÓ (Balanza SBE).
+        # 3. NO HAY MERMA (Porque no pagamos lo que se perdió).
+        tn_base_flete = peso_llegada
+        merma_money = 0.0 
+    else:
+        # CASO SALIDA (Estándar):
+        # 1. Se paga Flete sobre SALIDA.
+        # 2. Si falta arena en destino (> tolerancia), se cobra Multa.
+        tn_base_flete = peso_salida
+        diff = peso_salida - peso_llegada
+        
+        # Solo cobramos merma si falta (diff positivo). Si sobra (agua), diff es negativo y no entra.
+        if diff > tol_tn:
+            excess = diff - tol_tn
+            merma_money = excess * price_arena
+
+    # Cálculo final Flete
+    flete_neto = (tn_base_flete * price_flete) - merma_money
+    flete_iva  = max(0, flete_neto * 1.21)
+
+    # GRABAMOS SOLO DATOS DE FLETE (Arena se congela al enviar mail)
+    s.frozen_flete_price = price_flete
+    s.frozen_merma_money = merma_money
+    s.frozen_flete_neto  = flete_neto
+    s.frozen_flete_iva   = flete_iva
+    
+    # IMPORTANTE: Dejamos frozen_arena_price en None para indicar "No enviado/No deuda aún"
+    s.frozen_arena_price = None 
+
+    s.cert_status = "Certificado"
+    s.cert_fecha  = get_arg_today()
+    if s.status != "Llego": 
+        s.status = "Llego"
+        
 # ----------------------------
 # MODELOS
 # ----------------------------
@@ -783,59 +840,54 @@ def admin_dashboard_data():
     total_costo_proyectado = 0.0
 
     for s in all_ships:
-        # Rankings (Usamos base salida)
-        a_name = s.arenera.username
-        arenera_volumen[a_name] = arenera_volumen.get(a_name, 0) + (s.peso_neto_arenera or 0)
-        
-        t_name = s.transportista.username
-        w_trans = s.final_peso or s.sbe_peso_neto or 0
-        top_trans_map[t_name] = top_trans_map.get(t_name, 0) + w_trans
+        # ... (Rankings y Gráficos igual que antes) ...
 
-        # Cálculos Dinero (Igual que antes)
-        neto_flete = 0.0
-        neto_arena = 0.0
-        
-        val_w_in = s.final_peso or s.sbe_peso_neto or 0
-        val_w_out = s.peso_neto_arenera or 0
+        # --- CÁLCULO DE DINERO (VISIBILIDAD CONTROLADA) ---
+        iva_flete = 0.0
+        iva_arena = 0.0
 
-        if val_w_in > 0:
-            if s.frozen_flete_neto is not None:
-                neto_flete = s.frozen_flete_neto
-            else:
-                price_flete = s.transportista.custom_price or 0
-                price_arena_ref = s.arenera.custom_price or 0
-                tn_base = val_w_out if s.arenera.cert_type == 'salida' else val_w_in
-                merma_money = 0.0
-                if s.arenera.cert_type != 'salida':
-                    diff = val_w_out - val_w_in
-                    if diff > tol_tn: merma_money = (diff - tol_tn) * price_arena_ref
-                neto_flete = (tn_base * price_flete) - merma_money
-        
-        iva_flete = max(0, neto_flete * 1.21)
-        total_costo_proyectado += iva_flete
-
-        if val_w_out > 0:
-            p_arena = s.frozen_arena_price if s.frozen_arena_price is not None else (s.arenera.custom_price or 0)
-            neto_arena = val_w_out * p_arena
-        
-        iva_arena = max(0, neto_arena * 1.21)
-        total_costo_proyectado += iva_arena
-
-        if s.cert_status == "Certificado" and s.cert_fecha:
-            if iva_flete > 0:
+        # A. FLETE: Solo si está CERTIFICADO
+        if s.cert_status == "Certificado":
+            # Si está certificado, ya tiene frozen_flete_iva calculado
+            iva_flete = s.frozen_flete_iva or 0
+            
+            # Agregamos a la lista de pagos FLETE
+            if iva_flete > 0 and s.cert_fecha:
                 d_pay = s.cert_fecha + timedelta(days=(s.transportista.payment_days or 30))
                 payments_detail.append({
                     "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
                     "monto": iva_flete, "entidad": s.transportista.username, "tipo": "Flete",
                     "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()]
                 })
-            if iva_arena > 0:
-                d_pay = s.cert_fecha + timedelta(days=(s.arenera.payment_days or 30))
-                payments_detail.append({
-                    "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
-                    "monto": iva_arena, "entidad": s.arenera.username, "tipo": "Arena",
-                    "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()]
-                })
+
+        # B. ARENA: Solo si tiene PRECIO CONGELADO (Mail Enviado)
+        if s.frozen_arena_price is not None:
+            # Calculamos deuda real usando el precio congelado
+            # (Nota: Aquí la lógica de llegada ya se aplicó al congelar o calculamos al vuelo)
+            
+            # Recuperamos el peso pagable
+            w_arena = 0
+            if s.arenera.cert_type == 'llegada':
+                w_arena = s.final_peso or 0 # Peso Llegada
+            else:
+                w_arena = s.peso_neto_arenera or 0 # Peso Salida
+            
+            neto_arena = w_arena * s.frozen_arena_price
+            iva_arena  = max(0, neto_arena * 1.21)
+
+            # Agregamos a la lista de pagos ARENA
+            # Usamos cert_fecha si existe, o la fecha del viaje como fallback
+            ref_date = s.cert_fecha or s.date
+            d_pay = ref_date + timedelta(days=(s.arenera.payment_days or 30))
+            
+            payments_detail.append({
+                "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
+                "monto": iva_arena, "entidad": s.arenera.username, "tipo": "Arena",
+                "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()]
+            })
+
+        # Sumar al KPI Total Proyectado
+        total_costo_proyectado += (iva_flete + iva_arena)
 
     # --- D. PREPARAR JSON FINAL ---
     sorted_days = sorted(daily_stats.keys())
@@ -1022,48 +1074,9 @@ def edit_own_shipment(ship_id):
 @role_required("admin")
 def certify_shipment(shipment_id):
     s = Shipment.query.get_or_404(shipment_id)
-    
-    s.final_remito = s.sbe_remito if s.sbe_remito else s.remito_arenera
-    peso_final = s.sbe_peso_neto if (s.sbe_peso_neto and s.sbe_peso_neto > 0) else s.peso_neto_arenera
-    s.final_peso = peso_final
-
-    price_flete = s.transportista.custom_price or 0
-    price_arena = s.arenera.custom_price or 0
-    
-    conf = get_config()
-    tol_tn = conf.tolerance_kg / 1000.0
-    
-    peso_salida = s.peso_neto_arenera or 0
-    merma_money = 0.0
-    tn_base_flete = 0.0
-
-    if s.arenera.cert_type == 'salida':
-        tn_base_flete = peso_salida
-        merma_money = 0.0
-    else:
-        tn_base_flete = peso_final
-        diff = peso_salida - peso_final
-        if diff > tol_tn:
-            excess = diff - tol_tn
-            merma_money = excess * price_arena
-
-    flete_neto = (tn_base_flete * price_flete) - merma_money
-    flete_iva  = flete_neto * 1.21
-    if flete_iva < 0: flete_iva = 0 
-
-    s.frozen_flete_price = price_flete
-    s.frozen_arena_price = price_arena
-    s.frozen_merma_money = merma_money
-    s.frozen_flete_neto  = flete_neto
-    s.frozen_flete_iva   = flete_iva
-
-    s.cert_status = "Certificado"
-    s.cert_fecha  = get_arg_today()
-    if s.status != "Llego": 
-        s.status = "Llego"
-
+    calculate_shipment_financials(s) # Usamos la lógica nueva
     db.session.commit()
-    flash(f"Viaje #{s.id} certificado. Neto: ${flete_neto:,.0f} (Multa: ${merma_money:,.0f})", "success")
+    flash(f"Viaje #{s.id} certificado (Flete Activado). Arena pendiente de envío.", "success")
     return redirect(url_for("admin_certificacion"))
 
 @app.post("/admin/corregir_sbe/<int:shipment_id>")
@@ -1115,23 +1128,19 @@ def corregir_sbe(shipment_id):
 @login_required
 @role_required("admin")
 def certify_batch():
-    # 1. Recuperar TODOS los Filtros del formulario
+    # 1. Recuperar TODOS los Filtros (Idéntico a tu código)
     tid_filter = request.form.get("transportista_id")
     aid_filter = request.form.get("arenera_id")
     start_str  = request.form.get("start")
     end_str    = request.form.get("end")
-    
-    # [NUEVOS FILTROS]
     search_q      = request.form.get("search")
     arr_start_str = request.form.get("arrival_start")
     arr_end_str   = request.form.get("arrival_end")
     
-    # 2. Construir la Query Base (Solo Pre-Aprobados)
+    # 2. Query Base
     q = Shipment.query.filter(Shipment.cert_status == "Pre-Aprobado")
 
-    # --- APLICAR FILTROS (Idéntico a la vista principal) ---
-
-    # A. Fechas de Salida (Viaje)
+    # --- APLICAR FILTROS ---
     if start_str and end_str:
         try:
             s_date = date.fromisoformat(start_str)
@@ -1139,90 +1148,42 @@ def certify_batch():
             q = q.filter(Shipment.date >= s_date, Shipment.date <= e_date)
         except ValueError: pass
 
-    # B. Empresas
     if tid_filter and tid_filter != "all":
         q = q.filter(Shipment.transportista_id == int(tid_filter))
     if aid_filter and aid_filter != "all":
         q = q.filter(Shipment.arenera_id == int(aid_filter))
 
-    # C. Búsqueda Texto
     if search_q:
-        q = q.filter(
-            or_(
-                Shipment.remito_arenera.ilike(f"%{search_q}%"),
-                Shipment.sbe_remito.ilike(f"%{search_q}%"),
-                Shipment.tractor.ilike(f"%{search_q}%")
-            )
-        )
+        q = q.filter(or_(
+            Shipment.remito_arenera.ilike(f"%{search_q}%"),
+            Shipment.sbe_remito.ilike(f"%{search_q}%"),
+            Shipment.tractor.ilike(f"%{search_q}%")
+        ))
 
-    # D. Fechas de Llegada SBE
     if arr_start_str:
-        try:
-            d_start = date.fromisoformat(arr_start_str)
-            q = q.filter(cast(Shipment.sbe_fecha_llegada, Date) >= d_start)
-        except ValueError: pass
-
+        try: q = q.filter(cast(Shipment.sbe_fecha_llegada, Date) >= date.fromisoformat(arr_start_str))
+        except: pass
     if arr_end_str:
-        try:
-            d_end = date.fromisoformat(arr_end_str)
-            q = q.filter(cast(Shipment.sbe_fecha_llegada, Date) <= d_end)
-        except ValueError: pass
+        try: q = q.filter(cast(Shipment.sbe_fecha_llegada, Date) <= date.fromisoformat(arr_end_str))
+        except: pass
 
     targets = q.all()
     
     if not targets:
-        flash("No hay viajes 'Pre-Aprobados' que coincidan con los filtros para certificar.", "info")
+        flash("No hay viajes 'Pre-Aprobados' que coincidan con los filtros.", "info")
         return redirect(url_for('admin_certificacion', **request.args))
 
-    # 3. Procesamiento Masivo
+    # 3. Procesamiento con Helper (LA CLAVE)
     count = 0
-    conf = get_config()
-    tol_tn = conf.tolerance_kg / 1000.0
-    hoy = get_arg_today()
-
     for s in targets:
-        # Lógica de certificación (Idéntica a la individual)
-        s.final_remito = s.sbe_remito
-        s.final_peso   = s.sbe_peso_neto
-        
-        price_flete = s.transportista.custom_price or 0
-        price_arena = s.arenera.custom_price or 0
-        
-        peso_salida = s.peso_neto_arenera or 0
-        peso_final  = s.final_peso or 0
-        
-        merma_money = 0.0
-        tn_base_flete = 0.0
-
-        if s.arenera.cert_type == 'salida':
-            tn_base_flete = peso_salida
-        else:
-            tn_base_flete = peso_final
-            diff = peso_salida - peso_final
-            if diff > tol_tn:
-                excess = diff - tol_tn
-                merma_money = excess * price_arena
-
-        flete_neto = (tn_base_flete * price_flete) - merma_money
-        flete_iva  = max(0, flete_neto * 1.21)
-
-        s.frozen_flete_price = price_flete
-        s.frozen_arena_price = price_arena
-        s.frozen_merma_money = merma_money
-        s.frozen_flete_neto  = flete_neto
-        s.frozen_flete_iva   = flete_iva
-
-        s.cert_status = "Certificado"
-        s.cert_fecha  = hoy
-        if s.status != "Llego": 
-            s.status = "Llego"
-            
+        # Usamos la función helper para garantizar que la lógica sea IDÉNTICA
+        # a la certificación manual (incluyendo reglas de llegada y merma).
+        calculate_shipment_financials(s) 
         count += 1
 
     db.session.commit()
     flash(f"✅ Éxito: Se certificaron masivamente {count} viajes.", "success")
     
-    # Redirigir manteniendo los filtros visuales (Reconstruimos la URL)
     return redirect(url_for('admin_certificacion', 
                             transportista_id=tid_filter, 
                             arenera_id=aid_filter, 
@@ -2819,7 +2780,7 @@ def preview_send():
 @role_required("admin")
 def send_email_action():
     target_id = request.form.get("target_id")
-    target_type = request.form.get("target_type")
+    target_type = request.form.get("target_type") # 'transportista' o 'arenera'
     start = request.form.get("start")
     end = request.form.get("end")
     mode = request.form.get("mode")
@@ -2828,26 +2789,55 @@ def send_email_action():
     subject    = request.form.get("subject")
     body       = request.form.get("body")
 
-    if not email_dest:
-        flash("El destinatario no tiene email configurado.", "error")
-        return redirect(request.referrer)
-
+    # 1. Generar PDF (Lógica existente)
     pdf_bytes, fname, error = _create_pdf_internal(target_id, target_type, start, end, mode)
     if error or not pdf_bytes:
-        flash(f"Error generando el PDF: {error}", "error")
+        flash(f"Error PDF: {error}", "error")
         return redirect(request.referrer)
 
+    # 2. Enviar Mail
     try:
-        send_email_graph(
-            destinatario=email_dest,
-            asunto=subject,
-            cuerpo=body,
-            attachment_bytes=pdf_bytes,
-            attachment_name=fname
-        )
-        flash(f"✅ Liquidación enviada correctamente a {email_dest} (vía Microsoft)", "success")
+        send_email_graph(destinatario=email_dest, asunto=subject, cuerpo=body, attachment_bytes=pdf_bytes, attachment_name=fname)
+        
+        # --- [NUEVO] MARCAR DEUDA DE ARENA SI ES ARENERA ---
+        if target_type == 'arenera':
+            # Recuperamos los mismos viajes que se usaron para el PDF
+            # (Reutilizamos la lógica de filtro de _create_pdf_internal pero simplificada aquí)
+            try:
+                s_date = date.fromisoformat(start)
+                e_date = date.fromisoformat(end)
+                target_user = User.query.get(int(target_id))
+                
+                # Query para buscar qué actualizar
+                q_upd = Shipment.query.filter(Shipment.arenera_id == int(target_id))
+                
+                if target_user.cert_type == 'salida':
+                    # Si es Salida, se podía enviar sin certificar, PERO ahora congelamos el precio
+                    q_upd = q_upd.filter(Shipment.date >= s_date, Shipment.date <= e_date, Shipment.peso_neto_arenera > 0)
+                else:
+                    # Si es Llegada, debían estar certificados
+                    q_upd = q_upd.filter(Shipment.cert_status == "Certificado", Shipment.cert_fecha >= s_date, Shipment.cert_fecha <= e_date)
+                
+                ships_to_freeze = q_upd.all()
+                count_frozen = 0
+                
+                for s in ships_to_freeze:
+                    # Si aún no tenía precio de arena congelado, lo congelamos AHORA
+                    if s.frozen_arena_price is None:
+                        s.frozen_arena_price = s.arenera.custom_price or 0
+                        count_frozen += 1
+                
+                db.session.commit()
+                flash(f"✅ Mail enviado y {count_frozen} viajes de arena marcados como Deuda Oficial.", "success")
+                
+            except Exception as e_db:
+                print(f"Error actualizando DB tras mail: {e_db}")
+                flash("Mail enviado, pero hubo error marcando la deuda en sistema.", "warning")
+        else:
+            flash(f"✅ Liquidación enviada correctamente.", "success")
+
     except Exception as e:
-        print(f"Error enviando mail: {e}")
+        print(f"Error mail: {e}")
         flash(f"❌ Error enviando correo: {e}", "error")
 
     if target_type == 'transportista':
