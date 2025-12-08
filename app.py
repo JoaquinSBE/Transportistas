@@ -2621,6 +2621,8 @@ def generate_pdf():
 
 def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     from xhtml2pdf import pisa
+    
+    # 1. Resolver Fechas
     today = get_arg_today()
     try:
         start_date = date.fromisoformat(start_str)
@@ -2633,11 +2635,16 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
 
     q = Shipment.query
     
-    # 1. FILTRADO (Misma lógica que paneles)
-    is_salida_mode = (target_type == 'arenera' and target_user.cert_type == 'salida')
+    # -------------------------------------------------------
+    # A. LÓGICA DE FILTRADO (CORREGIDA)
+    # -------------------------------------------------------
+    
+    # Detectamos si es Arenera para forzar el uso de fecha de viaje
+    is_arenera = (target_type == 'arenera')
+    is_salida_mode = (is_arenera and target_user.cert_type == 'salida')
 
     if is_salida_mode:
-        # Arenera Salida: No requiere certificado
+        # Caso Arenera Salida: No requiere certificado, solo que haya salido
         q = q.filter(
             Shipment.arenera_id == target_user.id,
             Shipment.date >= start_date, 
@@ -2647,23 +2654,29 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
             Shipment.status.in_(['Salido a SBE', 'Llego', 'Llegado a SBE', 'Certificado'])
         ).order_by(Shipment.date.asc())
     else:
-        # Transportista O Arenera Llegada: Requiere CERTIFICADO
+        # Caso Transportista O Arenera Llegada: Requiere CERTIFICADO
         q = q.filter(Shipment.cert_status == "Certificado")
         
         if target_type == 'transportista':
             q = q.filter(Shipment.transportista_id == target_user.id)
+            # Transportistas respetan el modo seleccionado (Travel vs Cert)
+            if date_mode == 'travel':
+                q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
+            else:
+                q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
         else:
+            # Caso Arenera Llegada
             q = q.filter(Shipment.arenera_id == target_user.id)
-
-        if date_mode == 'travel':
+            # ¡CORRECCIÓN CLAVE!: Si es Arenera, SIEMPRE filtramos por fecha de viaje (Shipment.date)
+            # para que coincida con la visualización en pantalla, ignorando la fecha de certificación administrativa.
             q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
-        else:
-            q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
 
     shipments = q.all()
     if not shipments: return None, None, "No hay datos para el rango seleccionado."
 
-    # 2. CÁLCULOS
+    # -------------------------------------------------------
+    # B. CÁLCULOS Y PESOS (CORREGIDO)
+    # -------------------------------------------------------
     total_tn = 0.0
     subtotal = 0.0
     descuento_dinero = 0.0
@@ -2672,21 +2685,21 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     ref_price = target_user.custom_price or 0
 
     for s in shipments:
-        # Detectar si usamos precios congelados
+        # 1. Detectar si usamos precios congelados (históricos)
         use_frozen = False
         if target_type == 'transportista':
             use_frozen = (s.frozen_flete_neto is not None)
         else:
             use_frozen = (s.frozen_arena_price is not None)
         
-        # A. PRECIO UNITARIO
+        # 2. Precio Unitario
         precio_unit = 0.0
         if use_frozen:
             precio_unit = s.frozen_flete_price if target_type == 'transportista' else s.frozen_arena_price
         else:
             precio_unit = ref_price
 
-        # B. PESO Y TOTALES
+        # 3. Cálculo de Pesos y Totales
         merma_linea = 0.0
         peso_pagable = 0.0
         neto_linea = 0.0
@@ -2703,17 +2716,19 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
                 neto_linea = peso_pagable * precio_unit
 
         else:
-            # --- Lógica Arenera (CORREGIDA) ---
+            # --- Lógica Arenera ---
             
             if target_user.cert_type == 'llegada':
-                # Paga por LLEGADA
-                # Prioridad: Peso Final Certificado > Peso SBE > Peso Salida
-                peso_pagable = s.final_peso if s.final_peso else (s.sbe_peso_neto or s.peso_neto_arenera or 0)
+                # ¡CORRECCIÓN CLAVE!: Eliminamos el fallback a 'peso_neto_arenera'.
+                # Si es por llegada, SOLO tomamos el peso final o SBE. 
+                # Si es 0, es 0. No sumamos la carga.
+                peso_detectado = s.final_peso if (s.final_peso and s.final_peso > 0) else s.sbe_peso_neto
+                peso_pagable = peso_detectado if (peso_detectado and peso_detectado > 0) else 0
             else:
                 # Paga por SALIDA
                 peso_pagable = s.peso_neto_arenera or 0
             
-            # Cálculo simple: Peso * Precio (Arenera no descuenta merma aquí)
+            # Cálculo simple: Peso * Precio
             neto_linea = peso_pagable * (precio_unit or 0)
             merma_linea = 0.0
 
@@ -2722,7 +2737,7 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
         subtotal += (neto_linea + merma_linea)
         descuento_dinero += merma_linea
         
-        # Strings de fechas
+        # Strings de fechas para el PDF
         f_llegada_str = s.sbe_fecha_llegada.strftime("%d/%m") if s.sbe_fecha_llegada else "-"
         f_cert_str = s.cert_fecha.strftime("%d/%m") if s.cert_fecha else "-"
 
@@ -2733,7 +2748,7 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
             "f_certif": f_cert_str,
             "chofer": s.chofer[:18] if s.chofer else "", 
             "patente": s.tractor,
-            "peso_salida": s.peso_neto_arenera, # Dato extra para el PDF
+            "peso_salida": s.peso_neto_arenera, 
             "peso": peso_pagable,
             "total_linea": neto_linea
         })
@@ -2741,7 +2756,7 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     total_neto = subtotal - descuento_dinero
     total_iva_inc = total_neto * 1.21
 
-    # Renderizar HTML
+    # Renderizar HTML usando el template existente
     html = render_template(
         "pdf_template.html",
         target_id=target_user.id,
