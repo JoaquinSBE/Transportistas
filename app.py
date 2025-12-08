@@ -2633,26 +2633,21 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
 
     q = Shipment.query
     
-    # ---------------------------------------------------------
-    # 1. LÓGICA DE FILTRADO (IGUAL QUE EN EL PANEL DE CONTROL)
-    # ---------------------------------------------------------
-    
-    # ¿Es una Arenera que cobra por SALIDA? (No requiere certificado)
+    # 1. FILTRADO (Misma lógica que paneles)
     is_salida_mode = (target_type == 'arenera' and target_user.cert_type == 'salida')
 
     if is_salida_mode:
+        # Arenera Salida: No requiere certificado
         q = q.filter(
             Shipment.arenera_id == target_user.id,
             Shipment.date >= start_date, 
             Shipment.date <= end_date,
             Shipment.peso_neto_arenera != None,
             Shipment.peso_neto_arenera > 0,
-            # Aceptamos viajes en curso o finalizados, siempre que hayan salido
             Shipment.status.in_(['Salido a SBE', 'Llego', 'Llegado a SBE', 'Certificado'])
         ).order_by(Shipment.date.asc())
-        
     else:
-        # Lógica Estándar (Transportistas o Areneras por Llegada) -> Requiere CERTIFICADO
+        # Transportista O Arenera Llegada: Requiere CERTIFICADO
         q = q.filter(Shipment.cert_status == "Certificado")
         
         if target_type == 'transportista':
@@ -2668,22 +2663,24 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     shipments = q.all()
     if not shipments: return None, None, "No hay datos para el rango seleccionado."
 
-    # ---------------------------------------------------------
-    # 2. CÁLCULOS (SOPORTA VIAJES NO CERTIFICADOS)
-    # ---------------------------------------------------------
+    # 2. CÁLCULOS
     total_tn = 0.0
     subtotal = 0.0
     descuento_dinero = 0.0
     items = []
     
-    # Precio actual (por si el viaje no está congelado)
     ref_price = target_user.custom_price or 0
 
     for s in shipments:
-        # ¿Tiene valores históricos congelados?
-        use_frozen = (s.frozen_flete_neto is not None)
+        # Detectar si usamos precios congelados
+        use_frozen = False
+        if target_type == 'transportista':
+            use_frozen = (s.frozen_flete_neto is not None)
+        else:
+            use_frozen = (s.frozen_arena_price is not None)
         
-        # A. PRECIO
+        # A. PRECIO UNITARIO
+        precio_unit = 0.0
         if use_frozen:
             precio_unit = s.frozen_flete_price if target_type == 'transportista' else s.frozen_arena_price
         else:
@@ -2691,47 +2688,52 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
 
         # B. PESO Y TOTALES
         merma_linea = 0.0
+        peso_pagable = 0.0
+        neto_linea = 0.0
         
         if target_type == 'transportista':
-            # Lógica Flete
+            # --- Lógica Flete ---
             if use_frozen:
-                neto_linea = s.frozen_flete_neto
+                neto_linea = s.frozen_flete_neto or 0
                 merma_linea = s.frozen_merma_money or 0
-                # Reconstruimos peso aprox para mostrar
                 peso_pagable = (neto_linea + merma_linea) / (precio_unit if precio_unit else 1)
             else:
-                # Estimación al vuelo (Si es Transportista, generalmente requiere certificado, 
-                # pero dejamos esto por seguridad)
-                peso_pagable = s.final_peso or s.sbe_peso_neto or 0
+                peso_llegada = s.final_peso or s.sbe_peso_neto or 0
+                peso_pagable = peso_llegada 
                 neto_linea = peso_pagable * precio_unit
 
         else:
-            # Lógica Venta Arena
-            # En modo Salida, pagamos lo que dice la balanza de origen
-            peso_pagable = s.peso_neto_arenera or 0
+            # --- Lógica Arenera (CORREGIDA) ---
+            
+            if target_user.cert_type == 'llegada':
+                # Paga por LLEGADA
+                # Prioridad: Peso Final Certificado > Peso SBE > Peso Salida
+                peso_pagable = s.final_peso if s.final_peso else (s.sbe_peso_neto or s.peso_neto_arenera or 0)
+            else:
+                # Paga por SALIDA
+                peso_pagable = s.peso_neto_arenera or 0
+            
+            # Cálculo simple: Peso * Precio (Arenera no descuenta merma aquí)
             neto_linea = peso_pagable * (precio_unit or 0)
+            merma_linea = 0.0
 
-        # Acumular
+        # Acumuladores
         total_tn += peso_pagable
         subtotal += (neto_linea + merma_linea)
         descuento_dinero += merma_linea
         
-        # Fechas para el PDF
-        f_llegada_str = "-"
-        if s.sbe_fecha_llegada: 
-            f_llegada_str = s.sbe_fecha_llegada.strftime("%d/%m")
-        
-        f_cert_str = "-"
-        if s.cert_fecha:
-            f_cert_str = s.cert_fecha.strftime("%d/%m")
+        # Strings de fechas
+        f_llegada_str = s.sbe_fecha_llegada.strftime("%d/%m") if s.sbe_fecha_llegada else "-"
+        f_cert_str = s.cert_fecha.strftime("%d/%m") if s.cert_fecha else "-"
 
         items.append({
             "remito": s.final_remito if s.cert_status == 'Certificado' else (s.remito_arenera or s.sbe_remito),
             "f_salida": s.date.strftime("%d/%m"),
             "f_llegada": f_llegada_str,
             "f_certif": f_cert_str,
-            "chofer": s.chofer[:18], 
+            "chofer": s.chofer[:18] if s.chofer else "", 
             "patente": s.tractor,
+            "peso_salida": s.peso_neto_arenera, # Dato extra para el PDF
             "peso": peso_pagable,
             "total_linea": neto_linea
         })

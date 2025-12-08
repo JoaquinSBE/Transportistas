@@ -1,203 +1,241 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-    <meta charset="UTF-8">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Reporte PDF</title>
     <style>
-        @page {
-            size: A4 landscape;
-            margin: 1cm;
-            /* Sin @bottom-center para máxima compatibilidad */
-        }
+      @page {
+        size: A4 landscape;
+        margin: 1cm;
+      }
+      body {
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 10pt;
+        color: #000;
+        line-height: 1.3;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 15px;
+      }
+      td {
+        padding: 5px 8px;
+        vertical-align: middle;
+      }
 
-        body {
-            font-family: Helvetica, Arial, sans-serif;
-            font-size: 10pt;
-            color: #000;
-            line-height: 1.4; /* Más espacio entre líneas de texto */
-        }
+      /* CAJAS DE ENCABEZADO */
+      .header-box {
+        background-color: #e0e0e0;
+        border: 1px solid #000;
+        text-align: center;
+        font-weight: bold;
+        font-size: 14pt;
+        padding: 10px;
+        margin-bottom: 15px;
+        text-transform: uppercase;
+      }
 
-        table { 
-            width: 100%; 
-            border-collapse: collapse; 
-        }
+      .info-table td {
+        border: 1px solid #000;
+      }
+      .label-cell {
+        background-color: #f0f0f0;
+        font-weight: bold;
+        width: 20%;
+      }
+      .value-cell {
+        width: 30%;
+        text-align: center;
+      }
 
-        /* Celdas Generales: Más padding para evitar solapamiento */
-        td { 
-            padding: 6px 8px; 
-            vertical-align: middle;
-        }
+      /* TABLA DE TOTALES (RESUMEN) */
+      .section-title {
+        font-weight: bold;
+        text-decoration: underline;
+        margin-bottom: 5px;
+        font-size: 11pt;
+      }
 
-        /* TÍTULO PRINCIPAL */
-        .header-box {
-            background-color: #d9d9d9;
-            border: 1px solid #000;
-            text-align: center;
-            font-weight: bold;
-            font-size: 12pt;
-            padding: 8px;
-            margin-bottom: 5px;
-        }
+      .totals-table {
+        width: 60%;
+      } /* Ancho reducido para que se lea mejor */
+      .totals-table td {
+        border-bottom: 1px solid #ccc;
+      }
 
-        /* TABLAS DE DATOS (Cabecera y Periodo) */
-        .data-table td {
-            border: 1px solid #000;
-        }
-        
-        .gray-bg { 
-            background-color: #d9d9d9; 
-            font-weight: bold; 
-            text-align: center;
-        }
-        
-        .yellow-bg {
-            background-color: #ffff00;
-            text-align: center;
-        }
+      .total-row-label {
+        text-align: left;
+      }
+      .total-row-value {
+        text-align: right;
+        font-weight: bold;
+      }
 
-        /* SECCIÓN DESCRIPCIÓN (TOTALES) */
-        .desc-title {
-            text-align: center;
-            font-weight: bold;
-            margin-top: 15px;
-            margin-bottom: 10px;
-            font-size: 11pt;
-        }
-        
-        .total-table {
-            width: 100%;
-            margin-bottom: 20px;
-        }
-        
-        /* Filas de totales con altura mínima para no solaparse */
-        .total-row td {
-            padding-top: 8px;
-            padding-bottom: 4px;
-            border-bottom: 1px solid #000;
-        }
-        
-        .total-label { text-align: left; }
-        .total-value { text-align: right; font-weight: bold; }
-        
-        /* Fila Final (Total a Facturar) */
-        .final-row td {
-            padding-top: 10px;
-            padding-bottom: 10px;
-            font-weight: bold;
-            font-size: 11pt;
-            border-bottom: 2px solid #000; /* Cierre visual fuerte */
-        }
+      .final-total td {
+        border-top: 2px solid #000;
+        border-bottom: 2px solid #000;
+        background-color: #f9f9f9;
+        font-size: 12pt;
+        font-weight: bold;
+        padding: 10px 8px;
+      }
 
-        /* TABLA DETALLE */
-        .detail-title-box {
-            background-color: #d9d9d9;
-            border: 1px solid #000;
-            text-align: center;
-            font-weight: bold;
-            font-size: 10pt;
-            padding: 4px;
-            border-bottom: none; /* Se une con la tabla */
-        }
-
-        .detail-table td {
-            border: 1px solid #000;
-            font-size: 9pt;
-            text-align: center;
-            padding: 5px;
-        }
-        
-        .detail-header td {
-            background-color: #f2f2f2; /* Gris muy suave para header detalle */
-            font-weight: bold;
-        }
-        
-        .text-right { text-align: right !important; padding-right: 8px !important; }
-        .text-left { text-align: left !important; padding-left: 8px !important; }
-
+      /* TABLA DETALLE */
+      .detail-header {
+        background-color: #333;
+        color: #fff;
+        text-align: center;
+        font-weight: bold;
+        font-size: 10pt;
+        padding: 5px;
+      }
+      .detail-table td {
+        border: 1px solid #000;
+        font-size: 9pt;
+        text-align: center;
+      }
+      .detail-th {
+        background-color: #d9d9d9;
+        font-weight: bold;
+      }
+      .text-right {
+        text-align: right !important;
+      }
+      .text-left {
+        text-align: left !important;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <div class="header-box">
+      {% if 'Arena' in tipo_reporte %} Liquidación de Venta de Arena {% else %}
+      Certificado de Flete {% endif %}
+    </div>
 
-    <div class="header-box">Certificado de Toneladas Transportadas</div>
-
-    <table class="data-table" style="margin-bottom: 5px;">
-        <tr>
-            <td width="60%" class="gray-bg">Fecha Emisión</td>
-            <td width="40%" style="text-align: center;">{{ fecha_emision }}</td>
-        </tr>
-        <tr>
-            <td class="gray-bg">Empresa de Transporte</td>
-            <td style="text-align: center;">{{ empresa }}</td>
-        </tr>
+    <table class="info-table">
+      <tr>
+        <td class="label-cell">Fecha Emisión</td>
+        <td class="value-cell">{{ fecha_emision }}</td>
+        <td class="label-cell">
+          {% if 'Arena' in tipo_reporte %}Cliente{% else %}Transportista{% endif
+          %}
+        </td>
+        <td class="value-cell">{{ empresa }}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Período</td>
+        <td colspan="3" style="text-align: center">
+          Desde <strong>{{ periodo_inicio }}</strong> hasta
+          <strong>{{ periodo_fin }}</strong>
+        </td>
+      </tr>
     </table>
 
-    <table class="data-table" style="margin-bottom: 10px;">
-        <tr>
-            <td width="60%" rowspan="2" class="gray-bg" style="vertical-align: middle;">Período Certificado</td>
-            <td width="15%" class="gray-bg">Desde</td>
-            <td width="25%" style="text-align: center;">{{ periodo_inicio }}</td>
-        </tr>
-        <tr>
-            <td class="gray-bg">Hasta</td>
-            <td style="text-align: center;">{{ periodo_fin }}</td>
-        </tr>
+    <div class="section-title">Resumen Económico</div>
+
+    <table class="totals-table">
+      <tr>
+        <td class="total-row-label">Total Toneladas</td>
+        <td class="total-row-value">
+          {{ "%.2f"|format(total_tn|default(0)) }} Tn
+        </td>
+      </tr>
+      <tr>
+        <td class="total-row-label">
+          {% if 'Arena' in tipo_reporte %}Precio Base ($/Tn){% else %}Tarifa
+          Flete ($/Tn){% endif %}
+        </td>
+        <td class="total-row-value">
+          $ {{ "{:,.2f}".format(precio_unitario|default(0)) }}
+        </td>
+      </tr>
+
+      <tr>
+        <td class="total-row-label">Subtotal</td>
+        <td class="total-row-value">
+          $ {{ "{:,.2f}".format(subtotal|default(0)) }}
+        </td>
+      </tr>
+
+      {% if descuento_dinero and descuento_dinero > 0 %}
+      <tr>
+        <td class="total-row-label" style="color: #b91c1c">
+          Descuentos / Mermas
+        </td>
+        <td class="total-row-value" style="color: #b91c1c">
+          - $ {{ "{:,.2f}".format(descuento_dinero) }}
+        </td>
+      </tr>
+      {% endif %}
+
+      <tr class="final-total">
+        <td>TOTAL NETO</td>
+        <td class="text-right">
+          $ {{ "{:,.2f}".format(total_neto|default(0)) }}
+        </td>
+      </tr>
+
+      <tr>
+        <td style="font-size: 8pt; color: #666; border: none">
+          IVA (21%) Estimado
+        </td>
+        <td
+          style="font-size: 8pt; color: #666; text-align: right; border: none"
+        >
+          $ {{ "{:,.2f}".format((total_iva_inc|default(0)) -
+          (total_neto|default(0))) }}
+        </td>
+      </tr>
+      <tr>
+        <td style="font-size: 9pt; font-weight: bold; border: none">
+          TOTAL CON IVA
+        </td>
+        <td
+          style="
+            font-size: 9pt;
+            font-weight: bold;
+            text-align: right;
+            border: none;
+          "
+        >
+          $ {{ "{:,.2f}".format(total_iva_inc|default(0)) }}
+        </td>
+      </tr>
     </table>
 
-    <div class="desc-title">Descripción</div>
-    
-    <table class="total-table">
-        <tr class="total-row">
-            <td class="total-label">Toneladas Transportadas (Tn)</td>
-            <td class="total-value">{{ "%.2f"|format(total_tn) }}</td>
-        </tr>
-        <tr class="total-row">
-            <td class="total-label">Valor Tarifa Flete (Arg. $/Tn)</td>
-            <td class="total-value">$ {{ "{:,.2f}".format(precio_unitario) }}</td>
-        </tr>
-        <tr class="total-row">
-            <td class="total-label">Sub total transportado (Arg. $)</td>
-            <td class="total-value">$ {{ "{:,.2f}".format(subtotal) }}</td>
-        </tr>
-        
-        <tr class="total-row">
-            <td class="total-label">Débitos Aplicados (Tn)</td>
-            <td class="total-value">{{ "%.2f"|format(tn_merma) }}</td>
-        </tr>
-        
-        <tr class="total-row">
-            <td class="total-label">Valor arena a descontar (Arg. $)</td>
-            <td class="total-value" style="color: #b91c1c;">$ {{ "{:,.2f}".format(descuento_dinero) }}</td>
-        </tr>
+    <br />
 
-        <tr class="final-row">
-            <td class="total-label">TOTAL A FACTURAR (Arg. $)</td>
-            <td class="total-value">$ {{ "{:,.2f}".format(total_neto) }}</td>
-        </tr>
-    </table>
+    <div class="detail-header">Detalle de Movimientos</div>
 
-    <div class="detail-title-box">Detalle</div>
-    
     <table class="detail-table" cellspacing="0" cellpadding="0">
-        <tr class="detail-header">
-            <td width="12%">Remito</td>
-            <td width="12%">Fecha desp</td>
-            <td width="24%">Chofer</td>
-            <td width="14%">Tractor</td>
-            <td width="12%">Fecha recep</td>
-            <td width="13%">Ton neto recib.</td>
-            <td width="13%">Fecha certif</td>
-        </tr>
-        {% for item in items %}
-        <tr>
-            <td>{{ item.remito }}</td>
-            <td>{{ item.f_salida }}</td>
-            <td class="text-left">{{ item.chofer }}</td>
-            <td>{{ item.patente }}</td>
-            <td>{{ item.f_llegada }}</td>
-            <td class="text-right">{{ "%.2f"|format(item.peso) }}</td>
-            <td>{{ item.f_certif }}</td>
-        </tr>
-        {% endfor %}
+      <tr class="detail-th">
+        <td width="12%">Remito</td>
+        <td width="12%">Fecha</td>
+        <td width="26%">Chofer</td>
+        <td width="12%">Patente</td>
+        <td width="12%">Tn Origen</td>
+        <td width="12%">Tn Destino</td>
+        <td width="14%">Total ($)</td>
+      </tr>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.remito }}</td>
+        <td>
+          {{ item.f_llegada if item.f_llegada != '-' else item.f_salida }}
+        </td>
+        <td class="text-left">{{ item.chofer }}</td>
+        <td>{{ item.patente }}</td>
+        <td>
+          {{ "%.2f"|format(item.peso_salida|default(0) if item.peso_salida is
+          defined else 0) }}
+        </td>
+        <td><strong>{{ "%.2f"|format(item.peso|default(0)) }}</strong></td>
+        <td class="text-right">
+          $ {{ "{:,.0f}".format(item.total_linea|default(0)) }}
+        </td>
+      </tr>
+      {% endfor %}
     </table>
-
-</body>
+  </body>
 </html>
