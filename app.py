@@ -1099,8 +1099,8 @@ def certify_shipment(shipment_id):
     s = Shipment.query.get_or_404(shipment_id)
     calculate_shipment_financials(s) # Usamos la lógica nueva
     db.session.commit()
-    flash(f"Viaje #{s.id} certificado (Flete Activado). Arena pendiente de envío.", "success")
-    return redirect(url_for("admin_certificacion"))
+    flash("Datos corregidos. Fechas ajustadas automáticamente.", "success")
+    return redirect(request.referrer or url_for("admin_certificacion"))
 
 @app.post("/admin/corregir_sbe/<int:shipment_id>")
 @login_required
@@ -1119,7 +1119,7 @@ def corregir_sbe(shipment_id):
         s.observation_reason = None
         db.session.commit()
         flash("Corrección manual eliminada. Listo para re-sincronizar.", "info")
-        return redirect(url_for("admin_certificacion"))
+        return redirect(request.referrer or url_for("admin_certificacion"))
 
     nuevo_remito = request.form.get("sbe_remito", "").strip()
     nuevo_peso   = request.form.get("sbe_peso", "").strip()
@@ -1131,7 +1131,7 @@ def corregir_sbe(shipment_id):
             s.sbe_peso_neto = float(nuevo_peso.replace(",", "."))
         except ValueError:
             flash("Error: Peso inválido.", "error")
-            return redirect(url_for("admin_certificacion"))
+            return redirect(request.referrer or url_for("admin_certificacion"))
     
     s.sbe_manual_override = True 
     if not s.sbe_fecha_salida:
@@ -1145,7 +1145,7 @@ def corregir_sbe(shipment_id):
          
     db.session.commit()
     flash("Datos corregidos. Fechas ajustadas automáticamente.", "success")
-    return redirect(url_for("admin_certificacion"))
+    return redirect(request.referrer or url_for("admin_certificacion"))
 
 @app.post("/admin/certificar_masivo")
 @login_required
