@@ -808,7 +808,7 @@ def admin_dashboard_data():
                 daily_stats[d_str]["in"] += (s.sbe_peso_neto or s.final_peso or 0)
 
     # ---------------------------------------------------------
-    # E. KPIs Y FINANZAS (CORREGIDO)
+    # E. KPIs Y FINANZAS (AGRUPADO POR SEMANA)
     # ---------------------------------------------------------
     tn_out_total = sum(v["out"] for v in daily_stats.values())
     tn_in_total  = sum(v["in"] for v in daily_stats.values())
@@ -852,7 +852,7 @@ def admin_dashboard_data():
             
         flete_iva = max(0, flete_neto * 1.21)
         
-        # 2. ARENA (Lógica Corregida: Paga Llegada si corresponde)
+        # 2. ARENA
         peso_arena_calc = 0
         if s.arenera.cert_type == 'llegada':
             peso_arena_calc = peso_llegada # Paga lo que llega
@@ -865,38 +865,51 @@ def admin_dashboard_data():
              
         iva_arena = max(0, neto_arena * 1.21)
 
-        # --- ACUMULACIÓN CONDICIONAL (EL ARREGLO) ---
+        # --- ACUMULACIÓN CONDICIONAL (NORMALIZADA AL LUNES) ---
 
-        # A. Sumar FLETE solo si está CERTIFICADO
+        # A. FLETE (Solo si está certificado)
         if s.cert_status == "Certificado" and s.cert_fecha:
-            # 1. Sumar al KPI Total
             total_costo_proyectado += flete_iva 
             
-            # 2. Agregar a la lista
             if s.frozen_flete_iva and s.frozen_flete_iva > 0:
-                d_pay = s.cert_fecha + timedelta(days=(s.transportista.payment_days or 30))
+                # 1. Normalizar al Lunes de la semana de certificación
+                lunes_base = s.cert_fecha - timedelta(days=s.cert_fecha.weekday())
+                
+                # 2. Calcular vencimiento sumando días al Lunes Base
+                d_pay = lunes_base + timedelta(days=(s.transportista.payment_days or 30))
+                
                 payments_detail.append({
-                    "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
-                    "monto": s.frozen_flete_iva, "entidad": s.transportista.username, "tipo": "Flete",
-                    "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()]
+                    "raw": d_pay, 
+                    "fecha": d_pay.strftime("%d/%m/%Y"),
+                    "monto": s.frozen_flete_iva, 
+                    "entidad": s.transportista.username, 
+                    "tipo": "Flete",
+                    "dia_semana": "Semana del " + lunes_base.strftime("%d/%m")
                 })
         
-        # B. Sumar ARENA solo si tiene MAIL ENVIADO (Precio congelado)
+        # B. ARENA (Solo si tiene mail enviado)
         if s.frozen_arena_price is not None:
-             # 1. Sumar al KPI Total
              total_costo_proyectado += iva_arena
 
-             # 2. Agregar a la lista
+             # Referencia: Fecha certificación o fecha viaje
              ref_date = s.cert_fecha or s.date
-             d_pay = ref_date + timedelta(days=(s.arenera.payment_days or 30))
              
-             # Usamos el valor real calculado con el precio congelado
+             # 1. Normalizar al Lunes de la semana
+             lunes_base = ref_date - timedelta(days=ref_date.weekday())
+
+             # 2. Calcular vencimiento sumando días al Lunes Base
+             d_pay = lunes_base + timedelta(days=(s.arenera.payment_days or 30))
+             
+             # Valor real
              monto_arena_final = (peso_arena_calc * s.frozen_arena_price) * 1.21
              
              payments_detail.append({
-                "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
-                "monto": monto_arena_final, "entidad": s.arenera.username, "tipo": "Arena",
-                "dia_semana": ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][d_pay.weekday()]
+                "raw": d_pay, 
+                "fecha": d_pay.strftime("%d/%m/%Y"),
+                "monto": monto_arena_final, 
+                "entidad": s.arenera.username, 
+                "tipo": "Arena",
+                "dia_semana": "Semana del " + lunes_base.strftime("%d/%m")
             })
 
     # --- F. JSON FINAL ---
@@ -907,6 +920,7 @@ def admin_dashboard_data():
 
     pay_map = {}
     for p in payments_detail:
+        # Agrupamos por Fecha Vencimiento + Entidad + Tipo
         k = f"{p['raw']}_{p['entidad']}_{p['tipo']}"
         if k not in pay_map: pay_map[k] = {**p, "count": 0, "monto": 0}
         pay_map[k]["monto"] += p["monto"]
