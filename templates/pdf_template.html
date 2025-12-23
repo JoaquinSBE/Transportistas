@@ -214,8 +214,18 @@
         <td width="12%">Fecha</td>
         <td width="26%">Chofer</td>
         <td width="12%">Patente</td>
-        <td width="12%">Tn Origen</td>
-        <td width="12%">Tn Destino</td>
+        <td
+          width="12%"
+          style="{{ 'background-color: #bbb;' if 'Arena' in tipo_reporte else '' }}"
+        >
+          Tn Origen
+        </td>
+        <td
+          width="12%"
+          style="{{ 'background-color: #bbb;' if not 'Arena' in tipo_reporte else '' }}"
+        >
+          Tn Destino
+        </td>
         <td width="14%">Total ($)</td>
       </tr>
       {% for item in items %}
@@ -226,11 +236,21 @@
         </td>
         <td class="text-left">{{ item.chofer }}</td>
         <td>{{ item.patente }}</td>
+
         <td>
-          {{ "%.2f"|format(item.peso_salida|default(0) if item.peso_salida is
-          defined else 0) }}
+          {% if 'Arena' in tipo_reporte %}<strong
+            >{% endif %} {{ "%.2f"|format(item.peso_salida|default(0)) }} {% if
+            'Arena' in tipo_reporte %}</strong
+          >{% endif %}
         </td>
-        <td><strong>{{ "%.2f"|format(item.peso|default(0)) }}</strong></td>
+
+        <td>
+          {% if not 'Arena' in tipo_reporte %}<strong
+            >{% endif %} {{ "%.2f"|format(item.peso_llegada|default(0)) }} {% if
+            not 'Arena' in tipo_reporte %}</strong
+          >{% endif %}
+        </td>
+
         <td class="text-right">
           $ {{ "{:,.0f}".format(item.total_linea|default(0)) }}
         </td>

@@ -193,7 +193,7 @@ def get_config():
 def calculate_shipment_financials(s):
     # 1. Definir Pesos
     peso_salida = s.peso_neto_arenera or 0
-    # Prioridad: SBE > Arenera (Si no hay SBE, usamos Arenera para no romper, pero debería haber SBE)
+    # Prioridad: SBE > Arenera. Si no hay SBE, usamos peso salida como fallback para no romper el calculo.
     peso_llegada = s.sbe_peso_neto if (s.sbe_peso_neto and s.sbe_peso_neto > 0) else peso_salida
     
     # Guardamos datos finales físicos
@@ -207,31 +207,26 @@ def calculate_shipment_financials(s):
     tol_tn = conf.tolerance_kg / 1000.0
     
     merma_money = 0.0
-    tn_base_flete = 0.0
+    
+    # --- REGLA DE ORO: EL FLETE SE PAGA SIEMPRE POR LLEGADA ---
+    tn_base_flete = peso_llegada
 
-    # --- LÓGICA MATEMÁTICA CORREGIDA ---
-    if s.arenera.cert_type == 'llegada':
-        # CASO LLEGADA:
-        # 1. Se paga Flete sobre lo que LLEGÓ (Balanza SBE).
-        # 2. Se paga Arena sobre lo que LLEGÓ (Balanza SBE).
-        # 3. NO HAY MERMA (Porque no pagamos lo que se perdió).
-        tn_base_flete = peso_llegada
-        merma_money = 0.0 
-    else:
-        # CASO SALIDA (Estándar):
-        # 1. Se paga Flete sobre SALIDA.
-        # 2. Si falta arena en destino (> tolerancia), se cobra Multa.
-        tn_base_flete = peso_salida
+    # --- LÓGICA DE MERMA ---
+    if s.arenera.cert_type == 'salida':
+        # Solo si la ARENERA cobra por salida, controlamos la merma al transporte.
         diff = peso_salida - peso_llegada
-        
-        # Solo cobramos merma si falta (diff positivo). Si sobra (agua), diff es negativo y no entra.
         if diff > tol_tn:
             excess = diff - tol_tn
             merma_money = excess * price_arena
+    else:
+        # Si la arenera es LLEGADA, no descontamos merma al transporte.
+        merma_money = 0.0
 
     # Cálculo final Flete
     flete_neto = (tn_base_flete * price_flete) - merma_money
-    flete_iva  = max(0, flete_neto * 1.21)
+    
+    # CORRECCIÓN IVA: Usamos 0.21 para calcular solo el impuesto
+    flete_iva  = max(0, flete_neto * 0.21)
 
     # GRABAMOS SOLO DATOS DE FLETE (Arena se congela al enviar mail)
     s.frozen_flete_price = price_flete
@@ -2437,9 +2432,9 @@ def admin_control_arena():
     aid = request.args.get("arenera_id")
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
+    search_q  = request.args.get("search", "").strip()
     today = get_arg_today()
-    
-    # 1. Resolver fechas
+
     if not start_str:
         last_monday = today - timedelta(days=today.weekday() + 7)
         start_date = last_monday
@@ -2459,49 +2454,53 @@ def admin_control_arena():
 
     if aid and aid != "none":
         selected_arenera = User.query.get(int(aid))
-        
-        # Query base filtrando por la arenera seleccionada
         q = Shipment.query.filter(Shipment.arenera_id == int(aid))
         
-        # --- LÓGICA CORREGIDA ---
+        # --- FILTRO BÚSQUEDA ---
+        if search_q:
+            q = q.filter(or_(
+                Shipment.remito_arenera.ilike(f"%{search_q}%"),
+                Shipment.sbe_remito.ilike(f"%{search_q}%"),
+                Shipment.final_remito.ilike(f"%{search_q}%")
+            ))
+
         if selected_arenera.cert_type == 'salida':
-            # CASO A: Cobran por SALIDA (Fecha Remito)
-            # NO pedimos que esté 'Certificado'. Solo pedimos que haya salido (tenga peso).
-            q = q.filter(
+             q = q.filter(
                 Shipment.date >= start_date, 
                 Shipment.date <= end_date,
                 Shipment.peso_neto_arenera != None,
                 Shipment.peso_neto_arenera > 0,
-                # Filtramos status para asegurar que no sea un viaje recién creado (En viaje) 
-                # sino uno que ya confirmaron salida.
                 Shipment.status.in_(['Salido a SBE', 'Llego', 'Llegado a SBE', 'Certificado'])
             )
         else:
-            # CASO B: Cobran por LLEGADA (Certificación)
-            # Aquí SÍ mantenemos la exigencia de que esté Certificado.
             q = q.filter(
                 Shipment.cert_status == "Certificado",
-                Shipment.date >= start_date,
-                Shipment.date <= end_date
+                Shipment.cert_fecha >= start_date, 
+                Shipment.cert_fecha <= end_date
             )
-        # ------------------------
 
         shipments = q.order_by(Shipment.date.asc()).all()
         
-        # Cálculos
         for s in shipments:
-            peso = s.peso_neto_arenera or 0
+            # 1. DEFINICIÓN DE PESO (Lógica Salida vs Llegada)
+            peso = 0.0
+            if selected_arenera.cert_type == 'llegada':
+                peso = s.final_peso if (s.final_peso and s.final_peso > 0) else (s.sbe_peso_neto or 0)
+            else:
+                peso = s.peso_neto_arenera or 0
             
-            # Si ya se certificó, tiene precio congelado. Si no (caso Salida pendiente), precio actual.
+            # 2. PRECIO
             precio = s.frozen_arena_price if s.frozen_arena_price is not None else (s.arenera.custom_price or 0)
             
+            # 3. TOTALES
             monto = peso * precio
             total_tn += peso
             total_money += monto
             
-            # Guardamos valores temporales para mostrar en el HTML
+            # Variables visuales
             s._calc_precio = precio
             s._calc_total_arena = monto
+            s._calc_peso_computado = peso 
 
     return render_template(tpl("admin_control_arena"),
                            areneras=areneras,
@@ -2509,6 +2508,7 @@ def admin_control_arena():
                            selected_arenera=selected_arenera,
                            sel_aid=aid,
                            start=start_date, end=end_date,
+                           search=search_q,
                            total_tn=total_tn, total_money=total_money)
 
 @app.route("/admin/control_flete", methods=["GET", "POST"])
@@ -2519,6 +2519,7 @@ def admin_control_flete():
     start_str = request.args.get("start")
     end_str   = request.args.get("end")
     date_mode = request.args.get("mode", "cert") 
+    search_q  = request.args.get("search", "").strip() 
     today = get_arg_today()
     
     if not start_str:
@@ -2532,6 +2533,7 @@ def admin_control_flete():
 
     transportistas = User.query.filter_by(tipo="transportista").order_by(User.username).all()
     shipments = []
+    
     total_tn = 0.0
     total_neto = 0.0
     total_iva = 0.0
@@ -2544,6 +2546,15 @@ def admin_control_flete():
             Shipment.transportista_id == int(tid),
             Shipment.cert_status == "Certificado"
         )
+        
+        if search_q:
+            q = q.filter(or_(
+                Shipment.remito_arenera.ilike(f"%{search_q}%"),
+                Shipment.sbe_remito.ilike(f"%{search_q}%"),
+                Shipment.final_remito.ilike(f"%{search_q}%"),
+                Shipment.chofer.ilike(f"%{search_q}%")
+            ))
+
         if date_mode == 'travel':
             q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
         else:
@@ -2554,33 +2565,36 @@ def admin_control_flete():
         tol_tn = conf.tolerance_kg / 1000.0
         
         for s in shipments:
-            if s.frozen_flete_neto is not None:
-                precio_flete = s.frozen_flete_price or 0
-                merma_money  = s.frozen_merma_money or 0
-                neto         = s.frozen_flete_neto or 0
-                iva_monto = neto * 0.21
-            else:
-                loaded  = s.peso_neto_arenera or 0
-                arrived = s.final_peso or 0
-                precio_flete = s.transportista.custom_price or 0
-                precio_arena = s.arenera.custom_price or 0
-                tn_base = loaded if s.arenera.cert_type == 'salida' else arrived
-                merma_money = 0.0
-                if s.arenera.cert_type != 'salida':
-                    diff = loaded - arrived
-                    if diff > tol_tn:
-                        merma_money = (diff - tol_tn) * precio_arena
+             # 1. Definir Pesos
+             loaded  = s.peso_neto_arenera or 0
+             arrived = s.final_peso if (s.final_peso and s.final_peso > 0) else (s.sbe_peso_neto or 0)
+             
+             # 2. Definir Precio
+             precio_flete = s.frozen_flete_price if s.frozen_flete_price is not None else (s.transportista.custom_price or 0)
+             precio_arena = s.arenera.custom_price or 0
+             
+             # 3. BASE IMPONIBLE (Siempre Llegada)
+             tn_base = arrived
+             
+             # 4. MERMA (Solo si arenera es Salida)
+             merma_money = 0.0
+             if s.arenera.cert_type == 'salida':
+                diff = loaded - arrived
+                if diff > tol_tn:
+                    merma_money = (diff - tol_tn) * precio_arena
 
-                neto = (tn_base * precio_flete) - merma_money
-                iva_monto = max(0, neto * 0.21)
+             # 5. NETO y IVA (0.21)
+             neto = (tn_base * precio_flete) - merma_money
+             iva_monto = max(0, neto * 0.21)
 
-            total_tn   += (s.final_peso or 0)
-            total_neto += neto
-            total_iva  += iva_monto
-            s._calc_price = precio_flete
-            s._calc_merma = merma_money
-            s._calc_neto  = neto
-            s._calc_total = neto + iva_monto
+             total_tn   += arrived 
+             total_neto += neto
+             total_iva  += iva_monto
+             
+             s._calc_price = precio_flete
+             s._calc_merma = merma_money
+             s._calc_neto  = neto
+             s._calc_total = neto + iva_monto
 
     total_final = total_neto + total_iva
 
@@ -2591,6 +2605,7 @@ def admin_control_flete():
                            sel_tid=tid,
                            start=start_date, end=end_date,
                            date_mode=date_mode,
+                           search=search_q,
                            total_tn=total_tn, 
                            total_neto=total_neto,
                            total_iva=total_iva,
@@ -2645,7 +2660,6 @@ def generate_pdf():
 def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     from xhtml2pdf import pisa
     
-    # 1. Resolver Fechas
     today = get_arg_today()
     try:
         start_date = date.fromisoformat(start_str)
@@ -2658,16 +2672,10 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
 
     q = Shipment.query
     
-    # -------------------------------------------------------
-    # A. LÓGICA DE FILTRADO (CORREGIDA)
-    # -------------------------------------------------------
-    
-    # Detectamos si es Arenera para forzar el uso de fecha de viaje
     is_arenera = (target_type == 'arenera')
     is_salida_mode = (is_arenera and target_user.cert_type == 'salida')
 
     if is_salida_mode:
-        # Caso Arenera Salida: No requiere certificado, solo que haya salido
         q = q.filter(
             Shipment.arenera_id == target_user.id,
             Shipment.date >= start_date, 
@@ -2677,90 +2685,78 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
             Shipment.status.in_(['Salido a SBE', 'Llego', 'Llegado a SBE', 'Certificado'])
         ).order_by(Shipment.date.asc())
     else:
-        # Caso Transportista O Arenera Llegada: Requiere CERTIFICADO
         q = q.filter(Shipment.cert_status == "Certificado")
-        
         if target_type == 'transportista':
             q = q.filter(Shipment.transportista_id == target_user.id)
-            # Transportistas respetan el modo seleccionado (Travel vs Cert)
             if date_mode == 'travel':
                 q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
             else:
                 q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
         else:
-            # Caso Arenera Llegada
             q = q.filter(Shipment.arenera_id == target_user.id)
-            # ¡CORRECCIÓN CLAVE!: Si es Arenera, SIEMPRE filtramos por fecha de viaje (Shipment.date)
-            # para que coincida con la visualización en pantalla, ignorando la fecha de certificación administrativa.
             q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
 
     shipments = q.all()
     if not shipments: return None, None, "No hay datos para el rango seleccionado."
 
-    # -------------------------------------------------------
-    # B. CÁLCULOS Y PESOS (CORREGIDO)
-    # -------------------------------------------------------
     total_tn = 0.0
     subtotal = 0.0
     descuento_dinero = 0.0
     items = []
     
     ref_price = target_user.custom_price or 0
+    conf = get_config()
+    tol_tn = conf.tolerance_kg / 1000.0
 
     for s in shipments:
-        # 1. Detectar si usamos precios congelados (históricos)
+        # Pesos
+        peso_salida_real = s.peso_neto_arenera or 0
+        peso_llegada_real = s.final_peso if (s.final_peso and s.final_peso > 0) else (s.sbe_peso_neto or 0)
+
+        # Precio
         use_frozen = False
+        precio_unit = 0.0
+        
         if target_type == 'transportista':
-            use_frozen = (s.frozen_flete_neto is not None)
+            use_frozen = (s.frozen_flete_price is not None)
+            precio_unit = s.frozen_flete_price if use_frozen else ref_price
         else:
             use_frozen = (s.frozen_arena_price is not None)
-        
-        # 2. Precio Unitario
-        precio_unit = 0.0
-        if use_frozen:
-            precio_unit = s.frozen_flete_price if target_type == 'transportista' else s.frozen_arena_price
-        else:
-            precio_unit = ref_price
+            precio_unit = s.frozen_arena_price if use_frozen else ref_price
 
-        # 3. Cálculo de Pesos y Totales
         merma_linea = 0.0
         peso_pagable = 0.0
         neto_linea = 0.0
         
         if target_type == 'transportista':
-            # --- Lógica Flete ---
-            if use_frozen:
-                neto_linea = s.frozen_flete_neto or 0
-                merma_linea = s.frozen_merma_money or 0
-                peso_pagable = (neto_linea + merma_linea) / (precio_unit if precio_unit else 1)
-            else:
-                peso_llegada = s.final_peso or s.sbe_peso_neto or 0
-                peso_pagable = peso_llegada 
-                neto_linea = peso_pagable * precio_unit
+            # --- LÓGICA TRANSPORTE ---
+            # BASE: Siempre llegada
+            tn_base = peso_llegada_real
+            
+            # MERMA: Solo si arenera es Salida
+            if s.arenera.cert_type == 'salida':
+                diff = peso_salida_real - peso_llegada_real
+                if diff > tol_tn:
+                    p_arena = s.arenera.custom_price or 0
+                    merma_linea = (diff - tol_tn) * p_arena
+            
+            peso_pagable = tn_base
+            neto_linea = (peso_pagable * precio_unit)
 
         else:
-            # --- Lógica Arenera ---
-            
+            # --- LÓGICA ARENERA (Sin cambios) ---
             if target_user.cert_type == 'llegada':
-                # ¡CORRECCIÓN CLAVE!: Eliminamos el fallback a 'peso_neto_arenera'.
-                # Si es por llegada, SOLO tomamos el peso final o SBE. 
-                # Si es 0, es 0. No sumamos la carga.
-                peso_detectado = s.final_peso if (s.final_peso and s.final_peso > 0) else s.sbe_peso_neto
-                peso_pagable = peso_detectado if (peso_detectado and peso_detectado > 0) else 0
+                peso_pagable = peso_llegada_real
             else:
-                # Paga por SALIDA
-                peso_pagable = s.peso_neto_arenera or 0
+                peso_pagable = peso_salida_real
             
-            # Cálculo simple: Peso * Precio
-            neto_linea = peso_pagable * (precio_unit or 0)
+            neto_linea = peso_pagable * precio_unit
             merma_linea = 0.0
 
-        # Acumuladores
         total_tn += peso_pagable
-        subtotal += (neto_linea + merma_linea)
+        subtotal += neto_linea 
         descuento_dinero += merma_linea
         
-        # Strings de fechas para el PDF
         f_llegada_str = s.sbe_fecha_llegada.strftime("%d/%m") if s.sbe_fecha_llegada else "-"
         f_cert_str = s.cert_fecha.strftime("%d/%m") if s.cert_fecha else "-"
 
@@ -2771,15 +2767,15 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
             "f_certif": f_cert_str,
             "chofer": s.chofer[:18] if s.chofer else "", 
             "patente": s.tractor,
-            "peso_salida": s.peso_neto_arenera, 
+            "peso_salida": peso_salida_real,
+            "peso_llegada": peso_llegada_real,
             "peso": peso_pagable,
             "total_linea": neto_linea
         })
 
     total_neto = subtotal - descuento_dinero
-    total_iva_inc = total_neto * 1.21
+    total_iva_inc = total_neto * 1.21 
 
-    # Renderizar HTML usando el template existente
     html = render_template(
         "pdf_template.html",
         target_id=target_user.id,
