@@ -1307,7 +1307,9 @@ def transportista_history():
 
     min_date = db.session.query(func.min(Shipment.date)).filter_by(transportista_id=u.id).scalar() or get_arg_today()
     max_date = db.session.query(func.max(Shipment.date)).filter_by(transportista_id=u.id).scalar() or get_arg_today()
-
+    conf = get_config()
+    tol_tn = conf.tolerance_kg / 1000.0
+    
     try:
         start_date = date.fromisoformat(start_str) if start_str else min_date
     except ValueError:
@@ -1356,7 +1358,7 @@ def transportista_history():
         rows = [s for s in base_rows if s.status == status]
     else:
         rows = base_rows
-
+    
     return render_template(
         tpl("transportista_history"),
         user=u,
@@ -1366,6 +1368,7 @@ def transportista_history():
         end_date=end_date.isoformat(),
         status=status,
         search=(request.args.get("search") or "").strip(),
+        tol_tn=tol_tn
     )
 
 @app.get("/transportista/export")
@@ -1996,6 +1999,10 @@ def arenera_update(shipment_id):
         s.remito_arenera = rem_limpio  # Guardamos la versión limpia
         s.status = "Salido a SBE"
         
+        # --- NUEVO: ACTUALIZAMOS LA FECHA AL DÍA DE CARGA REAL ---
+        s.date = get_arg_today()
+        # ---------------------------------------------------------
+        
         # Limpiamos datos SBE por si hubo un cruce previo incorrecto
         s.sbe_remito = None
         s.sbe_peso_neto = None
@@ -2011,6 +2018,8 @@ def arenera_update(shipment_id):
         if s.status == "Salido a SBE":
             s.status = "En viaje"
             s.cert_status = "Pendiente"
+            # Nota: Al revertir NO restauramos la fecha original porque es complejo saber cuál era,
+            # pero el camión vuelve a estado "En viaje" con la fecha actual.
             flash("Corrección habilitada: El viaje ha vuelto a Recepción.", "info")
             db.session.commit()
             return redirect(url_for("arenera_panel")) 

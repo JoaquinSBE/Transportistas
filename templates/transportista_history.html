@@ -1,312 +1,540 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es" data-bs-theme="light">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-  <title>Historial de Viajes</title>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, user-scalable=no"
+    />
+    <title>Historial de Viajes</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  
-  <style>
-    :root {
-      --bs-font-sans-serif: 'Inter', sans-serif;
-      --bs-primary: #2563eb;
-      --bs-body-bg: #f3f4f6;
-      --bottom-nav-height: 70px;
-    }
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
 
-    body {
-      font-family: var(--bs-font-sans-serif);
-      background-color: var(--bs-body-bg);
-      padding-bottom: calc(var(--bottom-nav-height) + 20px);
-    }
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
 
-    /* --- TOP BAR --- */
-    .top-bar {
-      background: #fff; border-bottom: 1px solid #e5e7eb; padding: 1rem;
-      display: flex; justify-content: space-between; align-items: center;
-      position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-    }
-    .top-title { font-size: 1.1rem; font-weight: 700; color: #111827; margin: 0; }
+    <style>
+      :root {
+        --bs-font-sans-serif: "Inter", sans-serif;
+        --bs-primary: #2563eb;
+        --bs-body-bg: #f3f4f6;
+        --bottom-nav-height: 70px;
+      }
 
-    /* --- FILTROS --- */
-    .filter-card {
-      background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;
-      padding: 1rem; margin-bottom: 1.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    }
-    .form-label-sm { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
-    .form-control-sm { font-size: 0.85rem; border-radius: 6px; }
+      body {
+        font-family: var(--bs-font-sans-serif);
+        background-color: var(--bs-body-bg);
+        padding-bottom: calc(var(--bottom-nav-height) + 20px);
+      }
 
-    /* Chips */
-    .filter-chip {
-      border: 1px solid #e5e7eb; background: #fff; color: #374151; border-radius: 20px;
-      padding: 6px 12px; font-size: 0.8rem; text-decoration: none; font-weight: 500; transition: all 0.2s;
-      display: inline-flex; align-items: center; white-space: nowrap;
-    }
-    .filter-chip:hover { background: #f3f4f6; }
-    .filter-chip.active { background: #eff6ff; color: var(--bs-primary); border-color: #bfdbfe; }
-    .chip-count { background: rgba(0,0,0,0.05); border-radius: 4px; padding: 0 6px; font-size: 0.7rem; margin-left: 6px; }
+      /* --- TOP BAR --- */
+      .top-bar {
+        background: #fff;
+        border-bottom: 1px solid #e5e7eb;
+        padding: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+      }
+      .top-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #111827;
+        margin: 0;
+      }
 
-    /* --- TARJETAS DE VIAJE (MÓVIL) --- */
-    .history-card {
-      background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-      margin-bottom: 10px; border: 1px solid #e5e7eb; position: relative; overflow: hidden;
-    }
-    /* Banda lateral */
-    .history-card::before {
-      content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 5px;
-    }
-    .status-viaje::before { background-color: #f59e0b; }
-    .status-llego::before { background-color: #10b981; }
-    .status-cert::before { background-color: #3b82f6; }
-    
-    .card-content { padding: 12px 12px 12px 18px; }
-    
-    .trip-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
-    .trip-id { font-size: 0.75rem; font-weight: 700; color: #9ca3af; text-transform: uppercase; }
-    .trip-date { font-size: 0.75rem; color: #6b7280; }
+      /* --- FILTROS --- */
+      .filter-card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      }
+      .form-label-sm {
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #6b7280;
+        margin-bottom: 4px;
+      }
+      .form-control-sm {
+        font-size: 0.85rem;
+        border-radius: 6px;
+      }
 
-    .trip-main { font-weight: 700; color: #1f2937; font-size: 1rem; margin-bottom: 2px; }
-    .trip-sub { font-size: 0.85rem; color: #4b5563; }
+      /* Chips */
+      .filter-chip {
+        border: 1px solid #e5e7eb;
+        background: #fff;
+        color: #374151;
+        border-radius: 20px;
+        padding: 6px 12px;
+        font-size: 0.8rem;
+        text-decoration: none;
+        font-weight: 500;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+      }
+      .filter-chip:hover {
+        background: #f3f4f6;
+      }
+      .filter-chip.active {
+        background: #eff6ff;
+        color: var(--bs-primary);
+        border-color: #bfdbfe;
+      }
+      .chip-count {
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 4px;
+        padding: 0 6px;
+        font-size: 0.7rem;
+        margin-left: 6px;
+      }
 
-    /* Data Grid dentro de tarjeta */
-    .data-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #f3f4f6; }
-    .data-item { display: flex; flex-direction: column; }
-    .data-label { font-size: 0.65rem; text-transform: uppercase; color: #9ca3af; font-weight: 600; }
-    .data-value { font-size: 0.85rem; font-weight: 600; color: #374151; }
-    .val-cert { color: #059669; } /* Verde si certificado */
+      /* --- TARJETAS DE VIAJE (MÓVIL) --- */
+      .history-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        margin-bottom: 10px;
+        border: 1px solid #e5e7eb;
+        position: relative;
+        overflow: hidden;
+      }
+      /* Banda lateral */
+      .history-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 5px;
+      }
+      .status-viaje::before {
+        background-color: #f59e0b;
+      }
+      .status-llego::before {
+        background-color: #10b981;
+      }
+      .status-cert::before {
+        background-color: #3b82f6;
+      }
 
-    /* Badge Estado */
-    .badge-st { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    .bg-viaje { background: #fffbeb; color: #b45309; border: 1px solid #fcd34d; }
-    .bg-llego { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
-    .bg-cert { background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; }
+      .card-content {
+        padding: 12px 12px 12px 18px;
+      }
 
-    /* --- TABLA DESKTOP --- */
-    .card-table { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); overflow: hidden; }
-    .table-custom th { font-size: 0.75rem; text-transform: uppercase; color: #64748b; background: #f9fafb; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: 700; }
-    .table-custom td { font-size: 0.9rem; vertical-align: middle; padding: 8px 12px; color: #334155; border-bottom: 1px solid #f1f5f9; }
-    .table-custom tr:hover td { background-color: #f8fafc; }
+      .trip-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+      }
+      .trip-id {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #9ca3af;
+        text-transform: uppercase;
+      }
+      .trip-date {
+        font-size: 0.75rem;
+        color: #6b7280;
+      }
 
-    /* --- BOTTOM NAV --- */
-    .bottom-nav {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      height: var(--bottom-nav-height); background: #fff; border-top: 1px solid #e5e7eb;
-      display: flex; justify-content: space-around; align-items: center; z-index: 1000;
-    }
-    .nav-item-link {
-      display: flex; flex-direction: column; align-items: center;
-      text-decoration: none; color: #9ca3af; font-size: 0.75rem; font-weight: 500;
-    }
-    .nav-item-link i { font-size: 1.5rem; margin-bottom: 4px; }
-    .nav-item-link.active { color: var(--bs-primary); }
-  </style>
-</head>
-<body>
+      .trip-main {
+        font-weight: 700;
+        color: #1f2937;
+        font-size: 1rem;
+        margin-bottom: 2px;
+      }
+      .trip-sub {
+        font-size: 0.85rem;
+        color: #4b5563;
+      }
 
-  <div class="top-bar">
-    <div class="d-flex align-items-center gap-2">
-        <h1 class="top-title"><i class="fa-solid fa-clock-rotate-left text-primary me-2"></i>Historial</h1>
-    </div>
-    <div class="d-flex gap-2">
-        <a href="{{ url_for('transportista_export', start=start_date, end=end_date) }}" class="btn btn-outline-success btn-sm">
-            <i class="fa-solid fa-file-excel"></i> <span class="d-none d-sm-inline ms-1">Excel</span>
+      /* Data Grid dentro de tarjeta */
+      .data-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid #f3f4f6;
+      }
+      .data-item {
+        display: flex;
+        flex-direction: column;
+      }
+      .data-label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        color: #9ca3af;
+        font-weight: 600;
+      }
+      .data-value {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #374151;
+      }
+      .val-cert {
+        color: #059669;
+      } /* Verde si certificado */
+
+      /* Badge Estado */
+      .badge-st {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .bg-viaje {
+        background: #fffbeb;
+        color: #b45309;
+        border: 1px solid #fcd34d;
+      }
+      .bg-llego {
+        background: #ecfdf5;
+        color: #047857;
+        border: 1px solid #6ee7b7;
+      }
+      .bg-cert {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #93c5fd;
+      }
+
+      /* --- TABLA DESKTOP --- */
+      .card-table {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.03);
+        overflow: hidden;
+      }
+      .table-custom th {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #64748b;
+        background: #f9fafb;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e5e7eb;
+        font-weight: 700;
+      }
+      .table-custom td {
+        font-size: 0.9rem;
+        vertical-align: middle;
+        padding: 8px 12px;
+        color: #334155;
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .table-custom tr:hover td {
+        background-color: #f8fafc;
+      }
+
+      /* --- BOTTOM NAV --- */
+      .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: var(--bottom-nav-height);
+        background: #fff;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        z-index: 1000;
+      }
+      .nav-item-link {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-decoration: none;
+        color: #9ca3af;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+      .nav-item-link i {
+        font-size: 1.5rem;
+        margin-bottom: 4px;
+      }
+      .nav-item-link.active {
+        color: var(--bs-primary);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top-bar">
+      <div class="d-flex align-items-center gap-2">
+        <h1 class="top-title">
+          <i class="fa-solid fa-clock-rotate-left text-primary me-2"></i
+          >Historial
+        </h1>
+      </div>
+      <div class="d-flex gap-2">
+        <a
+          href="{{ url_for('transportista_export', start=start_date, end=end_date) }}"
+          class="btn btn-outline-success btn-sm"
+        >
+          <i class="fa-solid fa-file-excel"></i>
+          <span class="d-none d-sm-inline ms-1">Excel</span>
         </a>
-        <a href="{{ url_for('logout') }}" class="btn btn-sm text-danger fw-medium" title="Cerrar Sesión">
+        <a
+          href="{{ url_for('logout') }}"
+          class="btn btn-sm text-danger fw-medium"
+          title="Cerrar Sesión"
+        >
           <i class="fa-solid fa-arrow-right-from-bracket"></i>
         </a>
+      </div>
     </div>
-  </div>
 
-  <div class="container-xl px-3 mt-3">
-
-    <div class="filter-card">
+    <div class="container-xl px-3 mt-3">
+      <div class="filter-card">
         <form method="get" action="{{ url_for('transportista_history') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <div class="row g-2 align-items-end">
-                <div class="col-6 col-md-auto">
-                    <label class="form-label-sm">Desde</label>
-                    <input type="date" name="start_date" class="form-control form-control-sm" value="{{ start_date }}">
-                </div>
-                <div class="col-6 col-md-auto">
-                    <label class="form-label-sm">Hasta</label>
-                    <input type="date" name="end_date" class="form-control form-control-sm" value="{{ end_date }}">
-                </div>
-                <div class="col-12 col-md">
-                    <label class="form-label-sm">Búsqueda</label>
-                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Chofer, Patente, ID..." value="{{ search or '' }}">
-                </div>
-                <div class="col-12 col-md-auto">
-                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">Filtrar</button>
-                </div>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-auto">
+              <label class="form-label-sm">Desde</label>
+              <input
+                type="date"
+                name="start_date"
+                class="form-control form-control-sm"
+                value="{{ start_date }}"
+              />
             </div>
-            
-            <div class="d-flex gap-2 mt-3 overflow-auto pb-1">
-                {% set cur = status or '' %}
-                <a href="{{ url_for('transportista_history', start_date=start_date, end_date=end_date, search=search) }}" 
-                   class="filter-chip {{ 'active' if cur=='' else '' }}">
-                   Todos <span class="chip-count">{{ counts.total }}</span>
-                </a>
-                <a href="{{ url_for('transportista_history', start_date=start_date, end_date=end_date, search=search, status='En viaje') }}" 
-                   class="filter-chip {{ 'active' if cur=='En viaje' else '' }}">
-                   En viaje <span class="chip-count">{{ counts.en_viaje }}</span>
-                </a>
-                <a href="{{ url_for('transportista_history', start_date=start_date, end_date=end_date, search=search, status='Llego') }}" 
-                   class="filter-chip {{ 'active' if cur=='Llego' else '' }}">
-                   Llegados <span class="chip-count">{{ counts.llegados }}</span>
-                </a>
+            <div class="col-6 col-md-auto">
+              <label class="form-label-sm">Hasta</label>
+              <input
+                type="date"
+                name="end_date"
+                class="form-control form-control-sm"
+                value="{{ end_date }}"
+              />
             </div>
+            <div class="col-12 col-md">
+              <label class="form-label-sm">Búsqueda</label>
+              <input
+                type="text"
+                name="search"
+                class="form-control form-control-sm"
+                placeholder="Chofer, Patente, ID..."
+                value="{{ search or '' }}"
+              />
+            </div>
+            <div class="col-12 col-md-auto">
+              <button
+                type="submit"
+                class="btn btn-primary btn-sm w-100 fw-bold"
+              >
+                Filtrar
+              </button>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mt-3 overflow-auto pb-1">
+            {% set cur = status or '' %}
+            <a
+              href="{{ url_for('transportista_history', start_date=start_date, end_date=end_date, search=search) }}"
+              class="filter-chip {{ 'active' if cur=='' else '' }}"
+            >
+              Todos <span class="chip-count">{{ counts.total }}</span>
+            </a>
+            <a
+              href="{{ url_for('transportista_history', start_date=start_date, end_date=end_date, search=search, status='En viaje') }}"
+              class="filter-chip {{ 'active' if cur=='En viaje' else '' }}"
+            >
+              En viaje <span class="chip-count">{{ counts.en_viaje }}</span>
+            </a>
+            <a
+              href="{{ url_for('transportista_history', start_date=start_date, end_date=end_date, search=search, status='Llego') }}"
+              class="filter-chip {{ 'active' if cur=='Llego' else '' }}"
+            >
+              Llegados <span class="chip-count">{{ counts.llegados }}</span>
+            </a>
+          </div>
         </form>
-    </div>
+      </div>
 
-    <div class="d-md-none">
-        {% if shipments %}
-            {% for s in shipments %}
-            {% set status_class = 'status-viaje' %}
-            {% if s.cert_status == 'Certificado' %}
-                {% set status_class = 'status-cert' %}
-            {% elif s.status == 'Llego' %}
-                {% set status_class = 'status-llego' %}
-            {% endif %}
+      <div class="d-md-none">
+        {% if shipments %} {% for s in shipments %} {% set status_class =
+        'status-viaje' %} {% if s.cert_status == 'Certificado' %} {% set
+        status_class = 'status-cert' %} {% elif s.status == 'Llego' %} {% set
+        status_class = 'status-llego' %} {% endif %}
 
-            <div class="history-card {{ status_class }}">
-                <div class="card-content">
-                    <div class="trip-header">
-                        <span class="trip-id">#{{ s.id }}</span>
-                        <span class="trip-date">{{ s.date.strftime('%d/%m') }}</span>
-                    </div>
-                    
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="trip-main">{{ s.arenera.username }}</div>
-                            <div class="trip-sub">{{ s.chofer }}</div>
-                        </div>
-                        
-                        {% if s.cert_status == 'Certificado' %}
-                             <span class="badge-st bg-cert"><i class="fa-solid fa-check-double me-1"></i>Certificado</span>
-                        {% elif s.status == 'Llego' %}
-                             <span class="badge-st bg-llego">Llegó</span>
-                        {% else %}
-                             <span class="badge-st bg-viaje">En Viaje</span>
-                        {% endif %}
-                    </div>
-
-                    <div class="data-grid">
-                        <div class="data-item">
-                            <span class="data-label">Patente</span>
-                            <span class="data-value font-monospace">{{ s.tractor }}</span>
-                        </div>
-                        <div class="data-item">
-                            <span class="data-label">Remito</span>
-                            <span class="data-value">
-                                {% if s.cert_status == 'Certificado' %}
-                                    {{ s.final_remito or '-' }}
-                                {% else %}
-                                    {{ s.remito_arenera or '-' }}
-                                {% endif %}
-                            </span>
-                        </div>
-                        <div class="data-item">
-                            <span class="data-label">Peso Neto</span>
-                            <span class="data-value {{ 'val-cert' if s.cert_status == 'Certificado' else '' }}">
-                                {% if s.cert_status == 'Certificado' %}
-                                    {{ "%.2f"|format(s.final_peso) if s.final_peso else '-' }} Tn
-                                {% else %}
-                                    {{ "%.2f"|format(s.peso_neto_arenera) if s.peso_neto_arenera else '-' }} Tn
-                                {% endif %}
-                            </span>
-                        </div>
-                    </div>
-                </div>
+        <div class="history-card {{ status_class }}">
+          <div class="card-content">
+            <div class="trip-header">
+              <span class="trip-id">#{{ s.id }}</span>
+              <span class="trip-date">{{ s.date.strftime('%d/%m') }}</span>
             </div>
-            {% endfor %}
-        {% else %}
-            <div class="text-center py-5 text-muted opacity-50">
-                <i class="fa-solid fa-folder-open fa-3x mb-3"></i>
-                <p>No hay viajes en este período.</p>
-            </div>
-        {% endif %}
-    </div>
 
-    <div class="d-none d-md-block">
-        <div class="card-table">
-            <div class="table-responsive">
-                <table class="table table-custom mb-0">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Fecha</th>
-                            <th>Arenera</th>
-                            <th>Chofer</th>
-                            <th>Patente</th>
-                            <th>Remito</th>
-                            <th>Peso (Tn)</th>
-                            <th class="text-center">Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for s in shipments %}
-                        <tr>
-                            <td class="fw-bold text-primary">#{{ s.id }}</td>
-                            <td>{{ s.date.strftime('%d/%m/%Y') }}</td>
-                            <td>{{ s.arenera.username }}</td>
-                            <td>{{ s.chofer }}</td>
-                            <td class="font-monospace">{{ s.tractor }}</td>
-                            
-                            <td>
-                                {% if s.cert_status == 'Certificado' %}
-                                    <span class="fw-bold">{{ s.final_remito or '-' }}</span>
-                                {% else %}
-                                    {{ s.remito_arenera or '-' }}
-                                {% endif %}
-                            </td>
-                            
-                            <td>
-                                {% if s.cert_status == 'Certificado' %}
-                                    <span class="fw-bold text-success">{{ "%.2f"|format(s.final_peso) if s.final_peso else '-' }}</span>
-                                {% else %}
-                                    {{ "%.2f"|format(s.peso_neto_arenera) if s.peso_neto_arenera else '-' }}
-                                {% endif %}
-                            </td>
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="trip-main">{{ s.arenera.username }}</div>
+                <div class="trip-sub">{{ s.chofer }}</div>
+              </div>
 
-                            <td class="text-center">
-                                {% if s.cert_status == 'Certificado' %}
-                                     <span class="badge-st bg-cert">Certificado</span>
-                                {% elif s.status == 'Llego' %}
-                                     <span class="badge-st bg-llego">Llegó</span>
-                                {% else %}
-                                     <span class="badge-st bg-viaje">En Viaje</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="8" class="text-center py-5 text-muted">Sin resultados.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+              {% if s.cert_status == 'Certificado' %}
+              <span class="badge-st bg-cert"
+                ><i class="fa-solid fa-check-double me-1"></i>Certificado</span
+              >
+              {% elif s.status == 'Llego' %}
+              <span class="badge-st bg-llego">Llegó</span>
+              {% else %}
+              <span class="badge-st bg-viaje">En Viaje</span>
+              {% endif %}
             </div>
+
+            <div class="data-grid">
+              <div class="data-item">
+                <span class="data-label">Patente</span>
+                <span class="data-value font-monospace">{{ s.tractor }}</span>
+              </div>
+              <div class="data-item">
+                <span class="data-label">Remito</span>
+                <span class="data-value">
+                  {% if s.cert_status == 'Certificado' %} {{ s.final_remito or
+                  '-' }} {% else %} {{ s.remito_arenera or '-' }} {% endif %}
+                </span>
+              </div>
+              <div class="data-item">
+                <span class="data-label">Peso Neto</span>
+                <span
+                  class="data-value {{ 'val-cert' if s.cert_status == 'Certificado' else '' }}"
+                >
+                  {% if s.cert_status == 'Certificado' %} {{
+                  "%.2f"|format(s.final_peso) if s.final_peso else '-' }} Tn {%
+                  else %} {{ "%.2f"|format(s.peso_neto_arenera) if
+                  s.peso_neto_arenera else '-' }} Tn {% endif %}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
+        {% endfor %} {% else %}
+        <div class="text-center py-5 text-muted opacity-50">
+          <i class="fa-solid fa-folder-open fa-3x mb-3"></i>
+          <p>No hay viajes en este período.</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="d-none d-md-block">
+        <div class="card-table">
+          <div class="table-responsive">
+            <table class="table table-custom mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Fecha</th>
+                  <th>Arenera</th>
+                  <th>Chofer</th>
+                  <th>Patente</th>
+                  <th>Remito</th>
+                  <th>Tn Salida</th>
+                  <th>Tn Llegada</th>
+                  <th>Merma (Desc.)</th>
+                  <th class="text-center">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in shipments %}
+                <tr>
+                  <td class="fw-bold text-primary">#{{ s.id }}</td>
+                  <td>{{ s.date.strftime('%d/%m/%Y') }}</td>
+                  <td>{{ s.arenera.username }}</td>
+                  <td>{{ s.chofer }}</td>
+                  <td class="font-monospace">{{ s.tractor }}</td>
+
+                  <td>
+                    {% if s.cert_status == 'Certificado' %}
+                    <span class="fw-bold">{{ s.final_remito or '-' }}</span>
+                    {% else %} {{ s.remito_arenera or '-' }} {% endif %}
+                  </td>
+
+                  <td>
+                    {{ "%.2f"|format(s.peso_neto_arenera) if s.peso_neto_arenera
+                    else '-' }}
+                  </td>
+
+                  <td>
+                    {% set peso_dest = s.sbe_peso_neto if s.sbe_peso_neto else
+                    (s.final_peso if s.final_peso else 0) %} {% if peso_dest > 0
+                    %}
+                    <span class="fw-bold text-success"
+                      >{{ "%.2f"|format(peso_dest) }}</span
+                    >
+                    {% else %} - {% endif %}
+                  </td>
+
+                  <td class="text-danger fw-bold">
+                    {% set p_salida = s.peso_neto_arenera or 0 %} {% set
+                    p_llegada = s.sbe_peso_neto if s.sbe_peso_neto else
+                    (s.final_peso if s.final_peso else 0) %} {% if p_llegada > 0
+                    and p_salida > 0 %} {% set diff = p_salida - p_llegada %} {#
+                    Aquí aplicamos la lógica: Solo mostramos valor si supera
+                    tolerancia #} {% if diff > (tol_tn|default(0.7)) %} {{
+                    "%.2f"|format(diff - (tol_tn|default(0.7))) }} {% else %} -
+                    {% endif %} {% else %} - {% endif %}
+                  </td>
+
+                  <td class="text-center">
+                    {% if s.cert_status == 'Certificado' %}
+                    <span class="badge-st bg-cert">Certificado</span>
+                    {% elif s.status == 'Llego' %}
+                    <span class="badge-st bg-llego">Llegó</span>
+                    {% else %}
+                    <span class="badge-st bg-viaje">En Viaje</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% else %}
+                <tr>
+                  <td colspan="10" class="text-center py-5 text-muted">
+                    Sin resultados.
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
-  </div>
-
-  <nav class="bottom-nav">
-    <a href="{{ url_for('transportista_panel') }}" class="nav-item-link">
+    <nav class="bottom-nav">
+      <a href="{{ url_for('transportista_panel') }}" class="nav-item-link">
         <i class="fa-solid fa-house"></i><span>Inicio</span>
-    </a>
-    <a href="{{ url_for('transportista_quotas') }}" class="nav-item-link">
+      </a>
+      <a href="{{ url_for('transportista_quotas') }}" class="nav-item-link">
         <i class="fa-solid fa-calendar-check"></i><span>Cupos</span>
-    </a>
-    <a href="#" class="nav-item-link active">
+      </a>
+      <a href="#" class="nav-item-link active">
         <i class="fa-solid fa-clock-rotate-left"></i><span>Historial</span>
-    </a>
-  </nav>
+      </a>
+    </nav>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
 </html>
