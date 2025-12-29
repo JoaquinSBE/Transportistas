@@ -1630,50 +1630,77 @@ def transportista_arenera(arenera_id):
     try: dt = date.fromisoformat(date_str)
     except ValueError: dt = get_arg_today()
 
+    # Consulta inicial para mostrar datos en pantalla (GET)
     q = Quota.query.filter_by(transportista_id=u.id, arenera_id=arenera_id, date=dt).first_or_404()
 
     if request.method == "POST":
         if "delete_id" in request.form:
+            # --- LÓGICA DE ELIMINAR ---
             sid = request.form.get("delete_id")
             s = Shipment.query.get(sid)
+            # Verificamos que sea suyo, que esté En Viaje y que sea de la fecha actual
             if s and s.transportista_id==u.id and s.status=="En viaje" and s.date==dt:
                 db.session.delete(s)
+                # Restamos 1 al cupo (usamos max para que no baje de 0)
                 q.used = max(0, (q.used or 0) - 1)
                 db.session.commit()
                 flash("Viaje eliminado.", "success")
-        else:
-            if (q.used or 0) < (q.limit or 0):
-                chofer  = request.form.get("nombre_apellido", "").strip()
-                dni     = request.form.get("dni", "").strip()
-                gender  = request.form.get("gender", "M")
-                tipo    = request.form.get("tipo", "")
-                tractor = request.form.get("patente_tractor", "").strip().upper().replace(" ", "")
-                trailer = request.form.get("patente_batea", "").strip().upper().replace(" ", "")
-                
-                if chofer and dni and tractor:
-                    new_ship = Shipment(
-                        transportista_id=u.id,
-                        arenera_id=arenera_id,
-                        operador_id=u.id,
-                        date=dt,
-                        chofer=chofer,
-                        dni=dni,
-                        gender=gender,
-                        tipo=tipo,
-                        tractor=tractor,
-                        trailer=trailer,
-                        status="En viaje",
-                        peso_neto_arenera=None,
-                        cert_status="Pendiente"
-                    )
-                    db.session.add(new_ship)
-                    q.used = (q.used or 0) + 1
-                    db.session.commit()
-                    flash("Viaje iniciado. Diríjase a la Arenera.", "success")
-                else:
-                    flash("Faltan datos.", "error")
             else:
-                flash("Sin cupo disponible.", "error")
+                flash("No se pudo eliminar el viaje.", "error")
+                
+        else:
+            # --- LÓGICA DE CREAR (AQUÍ ESTABA EL ERROR DE CONCURRENCIA) ---
+            try:
+                # 1. BLOQUEO DE SEGURIDAD:
+                # Volvemos a buscar el cupo pero usando .with_for_update().
+                # Esto le dice a la Base de Datos: "Bloquea esta fila hasta que yo termine".
+                q_secure = Quota.query.filter_by(id=q.id).with_for_update().first()
+                
+                # 2. Verificamos el límite sobre el objeto BLOQUEADO y seguro
+                if (q_secure.used or 0) < (q_secure.limit or 0):
+                    
+                    chofer  = request.form.get("nombre_apellido", "").strip()
+                    dni     = request.form.get("dni", "").strip()
+                    gender  = request.form.get("gender", "M")
+                    tipo    = request.form.get("tipo", "")
+                    tractor = request.form.get("patente_tractor", "").strip().upper().replace(" ", "")
+                    trailer = request.form.get("patente_batea", "").strip().upper().replace(" ", "")
+                    
+                    if chofer and dni and tractor:
+                        new_ship = Shipment(
+                            transportista_id=u.id,
+                            arenera_id=arenera_id,
+                            operador_id=u.id,
+                            date=dt,
+                            chofer=chofer,
+                            dni=dni,
+                            gender=gender,
+                            tipo=tipo,
+                            tractor=tractor,
+                            trailer=trailer,
+                            status="En viaje",
+                            peso_neto_arenera=None,
+                            cert_status="Pendiente"
+                        )
+                        db.session.add(new_ship)
+                        
+                        # 3. Incrementamos el contador seguro
+                        q_secure.used = (q_secure.used or 0) + 1
+                        
+                        db.session.commit() # Al hacer commit se libera el bloqueo para el siguiente
+                        flash("Viaje iniciado. Diríjase a la Arenera.", "success")
+                    else:
+                        db.session.rollback()
+                        flash("Faltan datos obligatorios.", "error")
+                else:
+                    db.session.rollback()
+                    flash("¡Sin cupo! Alguien ocupó el último lugar recién.", "error")
+            
+            except Exception as e:
+                db.session.rollback()
+                print(f"Error concurrencia: {e}")
+                flash("Error al procesar la solicitud. Intente nuevamente.", "error")
+
         return redirect(url_for("transportista_arenera", arenera_id=arenera_id, date=dt.isoformat()))
 
     shipments = Shipment.query.filter_by(transportista_id=u.id, arenera_id=arenera_id, date=dt).order_by(Shipment.id.desc()).all()
