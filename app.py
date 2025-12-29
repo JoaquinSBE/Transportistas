@@ -2702,7 +2702,10 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     is_arenera = (target_type == 'arenera')
     is_salida_mode = (is_arenera and target_user.cert_type == 'salida')
 
+    # --- LÓGICA DE FILTRADO ---
     if is_salida_mode:
+        # CASO A: ARENERA SALIDA (Filtra por Fecha de Viaje)
+        # No requiere estado 'Certificado' estricto, busca viajes con remito/peso.
         q = q.filter(
             Shipment.arenera_id == target_user.id,
             Shipment.date >= start_date, 
@@ -2712,20 +2715,26 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
             Shipment.status.in_(['Salido a SBE', 'Llego', 'Llegado a SBE', 'Certificado'])
         ).order_by(Shipment.date.asc())
     else:
+        # CASO B: TODOS LOS DEMÁS (Requiere Certificación)
+        # Incluye: Transportistas y Areneras por LLEGADA
         q = q.filter(Shipment.cert_status == "Certificado")
+        
         if target_type == 'transportista':
             q = q.filter(Shipment.transportista_id == target_user.id)
+            # Transportistas pueden elegir ver por viaje o por certificación
             if date_mode == 'travel':
                 q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
             else:
                 q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
         else:
+            # ARENERA POR LLEGADA
             q = q.filter(Shipment.arenera_id == target_user.id)
-            q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
+            q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
 
     shipments = q.all()
     if not shipments: return None, None, "No hay datos para el rango seleccionado."
 
+    # --- CÁLCULOS (Lógica unificada con la vista web) ---
     total_tn = 0.0
     subtotal = 0.0
     descuento_dinero = 0.0
@@ -2736,11 +2745,11 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
     tol_tn = conf.tolerance_kg / 1000.0
 
     for s in shipments:
-        # Pesos
+        # 1. Pesos Reales
         peso_salida_real = s.peso_neto_arenera or 0
         peso_llegada_real = s.final_peso if (s.final_peso and s.final_peso > 0) else (s.sbe_peso_neto or 0)
 
-        # Precio
+        # 2. Precio Unitario (Frozen vs Actual)
         use_frozen = False
         precio_unit = 0.0
         
@@ -2756,11 +2765,10 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
         neto_linea = 0.0
         
         if target_type == 'transportista':
-            # --- LÓGICA TRANSPORTE ---
-            # BASE: Siempre llegada
+            # Flete: Base Llegada
             tn_base = peso_llegada_real
             
-            # MERMA: Solo si arenera es Salida
+            # Merma: Solo si Arenera es Salida
             if s.arenera.cert_type == 'salida':
                 diff = peso_salida_real - peso_llegada_real
                 if diff > tol_tn:
@@ -2771,7 +2779,7 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
             neto_linea = (peso_pagable * precio_unit)
 
         else:
-            # --- LÓGICA ARENERA (Sin cambios) ---
+            # Arenera: Depende del tipo
             if target_user.cert_type == 'llegada':
                 peso_pagable = peso_llegada_real
             else:

@@ -74,9 +74,9 @@
     /* --- BADGES & VALUES --- */
     .val-money { color: var(--bs-success); font-weight: 700; }
     
-    /* --- RESUMEN FINAL (Estilo Flete/Factura) --- */
+    /* --- RESUMEN FINAL --- */
     .summary-card {
-      background: linear-gradient(to right, #f0fdf4, #fff); /* Tinte verde muy suave para diferenciar Arena */
+      background: linear-gradient(to right, #f0fdf4, #fff); 
       border: 1px solid #bbf7d0;
     }
     .sum-label {
@@ -89,7 +89,7 @@
     .sum-value {
       font-size: 1.25rem;
       font-weight: 700;
-      color: #1e40af; /* Azul oscuro profesional */
+      color: #1e40af; 
     }
     
     /* --- FORMS --- */
@@ -131,12 +131,29 @@
             </div>
             
             <div class="col-md-3">
-                <label class="form-label-sm">Desde</label>
+                <label class="form-label-sm">
+                    {% if selected_arenera and selected_arenera.cert_type == 'llegada' %}
+                        Desde (F. Certif)
+                    {% else %}
+                        Desde (F. Viaje)
+                    {% endif %}
+                </label>
                 <input type="date" name="start" class="form-control" value="{{ start }}">
             </div>
             <div class="col-md-3">
-                <label class="form-label-sm">Hasta</label>
+                <label class="form-label-sm">
+                    {% if selected_arenera and selected_arenera.cert_type == 'llegada' %}
+                        Hasta (F. Certif)
+                    {% else %}
+                        Hasta (F. Viaje)
+                    {% endif %}
+                </label>
                 <input type="date" name="end" class="form-control" value="{{ end }}">
+            </div>
+
+            <div class="col-md-3" style="display:none;"> 
+                 <label class="form-label-sm">Buscar</label>
+                 <input type="text" name="search" class="form-control" placeholder="Remito..." value="{{ search or '' }}">
             </div>
 
             <div class="col-md-2">
@@ -156,6 +173,9 @@
                     <span class="badge bg-success-subtle text-success border border-success-subtle">
                         <i class="fa-solid fa-tag me-1"></i>Precio Pactado: ${{ selected_arenera.custom_price }} / Tn
                     </span>
+                    <span class="badge bg-light text-dark border">
+                        Tipo: {{ 'LLEGADA (Recibido)' if selected_arenera.cert_type == 'llegada' else 'SALIDA (Remito)' }}
+                    </span>
                 </div>
             </div>
             <div class="text-end">
@@ -171,11 +191,17 @@
                 <table class="table table-custom table-hover mb-0">
                     <thead>
                         <tr>
-                            <th class="ps-4">Fecha</th>
+                            <th class="ps-4">
+                                {% if selected_arenera.cert_type == 'llegada' %}
+                                    Fecha Certif.
+                                {% else %}
+                                    Fecha Viaje
+                                {% endif %}
+                            </th>
                             <th>Remito</th>
                             <th>Transporte</th>
                             <th>Patente</th>
-                            <th class="num-col">Tn Remito</th>
+                            <th class="num-col">Tn Cobrar</th>
                             <th class="num-col">Precio Unit.</th>
                             <th class="num-col pe-4">Subtotal</th>
                         </tr>
@@ -183,11 +209,19 @@
                     <tbody>
                         {% for s in shipments %}
                         <tr>
-                            <td class="ps-4">{{ s.date.strftime('%d/%m/%Y') }}</td>
+                            <td class="ps-4">
+                                {% if selected_arenera.cert_type == 'llegada' %}
+                                    <span class="fw-bold text-primary">
+                                        {{ s.cert_fecha.strftime('%d/%m/%Y') if s.cert_fecha else '-' }}
+                                    </span>
+                                {% else %}
+                                    {{ s.date.strftime('%d/%m/%Y') }}
+                                {% endif %}
+                            </td>
                             
                             <td>
                                 <span class="badge bg-light text-dark border font-monospace">
-                                    {{ s.remito_arenera or 'S/D' }}
+                                    {{ s.final_remito if s.cert_status == 'Certificado' else (s.remito_arenera or 'S/D') }}
                                 </span>
                             </td>
                             
@@ -198,11 +232,19 @@
                             <td class="text-muted small">{{ s.tractor }}</td>
                             
                             <td class="num-col fw-bold text-dark">
-                                {{ "%.2f"|format(s.peso_neto_arenera or 0) }}
+                                {{ "%.2f"|format(s._calc_peso_computado if s._calc_peso_computado is defined else (s.peso_neto_arenera or 0)) }}
                             </td>
                             
                             <td class="num-col text-muted">
-                                ${{ "{:,.2f}".format(s._calc_precio) }}
+                                {% if s.frozen_arena_price %}
+                                    <span class="text-success fw-bold" title="Precio Congelado">
+                                        <i class="fa-solid fa-lock fa-xs me-1"></i>${{ "{:,.2f}".format(s.frozen_arena_price) }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">
+                                        ${{ "{:,.2f}".format(s.arenera.custom_price) }}
+                                    </span>
+                                {% endif %}
                             </td>
                             
                             <td class="num-col pe-4 val-money">
@@ -213,7 +255,7 @@
                         <tr>
                             <td colspan="7" class="text-center py-5 text-muted">
                                 <i class="fa-solid fa-mound mb-3 fa-2x opacity-25"></i><br>
-                                No hay movimientos certificados para esta arenera en el período.
+                                No hay movimientos para esta selección.
                             </td>
                         </tr>
                         {% endfor %}
