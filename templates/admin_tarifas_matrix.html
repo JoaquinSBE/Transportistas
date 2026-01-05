@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <title>Matriz de Tarifas | Admin</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <style>
+      body {
+        background-color: #f3f4f6;
+        font-family: sans-serif;
+        padding-bottom: 60px;
+      }
+      .table-matrix th,
+      .table-matrix td {
+        text-align: center;
+        vertical-align: middle;
+      }
+      .table-matrix th:first-child,
+      .table-matrix td:first-child {
+        text-align: left;
+        font-weight: bold;
+        background: #f8f9fa;
+        position: sticky;
+        left: 0;
+        z-index: 10;
+      }
+      .input-price {
+        width: 100px;
+        text-align: right;
+      }
+      .header-row th {
+        position: sticky;
+        top: 0;
+        background: #e9ecef;
+        z-index: 5;
+      }
+      .header-row th:first-child {
+        z-index: 20;
+      } /* Esquina superior izquierda */
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid py-4">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>
+          <i class="fa-solid fa-table-cells me-2"></i>Matriz de Tarifas por
+          Trayecto
+        </h3>
+        <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-secondary"
+          >Volver</a
+        >
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %} {% if
+      messages %} {% for category, message in messages %}
+      <div class="alert alert-{{ category }}">{{ message }}</div>
+      {% endfor %} {% endif %} {% endwith %}
+
+      <div class="card shadow-sm">
+        <div class="card-body p-0">
+          <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <div class="table-responsive" style="max-height: 75vh">
+              <table class="table table-bordered table-hover mb-0 table-matrix">
+                <thead class="header-row">
+                  <tr>
+                    <th>Transportista \ Arenera</th>
+                    {% for a in areneras %}
+                    <th>{{ a.username }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for t in transportistas %}
+                  <tr>
+                    <td>
+                      {{ t.username }}
+                      <div class="small text-muted fw-normal">
+                        Base: ${{ t.custom_price }}
+                      </div>
+                    </td>
+                    {% for a in areneras %} {% set val = matrix.get((t.id,
+                    a.id), '') %}
+                    <td>
+                      <div
+                        class="input-group input-group-sm justify-content-center"
+                      >
+                        <span class="input-group-text">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          name="price_{{ t.id }}_{{ a.id }}"
+                          class="form-control input-price"
+                          value="{{ val }}"
+                          placeholder="{{ t.custom_price }}"
+                        />
+                      </div>
+                    </td>
+                    {% endfor %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="p-3 bg-light border-top text-end sticky-bottom">
+              <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="alert alert-info mt-3">
+        <i class="fa-solid fa-circle-info me-2"></i>
+        <strong>Nota:</strong> Si dejas una casilla vacía, el sistema usará
+        automáticamente el <em>Precio Base</em> configurado en el perfil del
+        transportista.
+      </div>
+    </div>
+  </body>
+</html>

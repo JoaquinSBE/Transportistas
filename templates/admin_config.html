@@ -155,10 +155,18 @@
             </div>
         </div>
 
-        <div class="card-custom">
+<div class="card-custom">
             <div class="card-header-custom">
-                <div class="bg-light text-info p-2 rounded"><i class="fa-solid fa-truck-fast"></i></div>
-                <h3 class="card-title-custom">Transportistas</h3>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="bg-light text-info p-2 rounded"><i class="fa-solid fa-truck-fast"></i></div>
+                    <h3 class="card-title-custom">Transportistas</h3>
+                </div>
+                
+                <div class="ms-auto">
+                    <a href="{{ url_for('admin_tarifas_matrix') }}" class="btn btn-sm btn-outline-primary fw-bold">
+                        <i class="fa-solid fa-table-cells me-2"></i>Tarifas Diferenciadas
+                    </a>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-config mb-0">
@@ -167,14 +175,16 @@
                             <th style="width: 25%;">Transportista</th>
                             <th style="width: 30%;">Contacto / Email</th>
                             <th style="width: 20%;">Condiciones Pago</th>
-                            <th style="width: 25%;">Tarifa Flete</th>
-                        </tr>
+                            <th style="width: 25%;">Tarifa Base (General)</th> </tr>
                     </thead>
                     <tbody>
                         {% for t in transportistas %}
                         <tr>
                             <td>
                                 <div class="fw-medium text-dark">{{ t.username }}</div>
+                                <div class="text-muted" style="font-size: 0.7rem;">
+                                    <i class="fa-solid fa-circle-info me-1"></i>Usa tarifa base si no hay específica
+                                </div>
                             </td>
                             <td>
                                 <input type="email" class="form-control form-control-sm" name="email_{{ t.id }}" value="{{ t.email or '' }}" placeholder="Sin email registrado">

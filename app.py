@@ -200,7 +200,7 @@ def calculate_shipment_financials(s):
     s.final_remito = s.sbe_remito if s.sbe_remito else s.remito_arenera
     s.final_peso   = peso_llegada
 
-    price_flete = s.transportista.custom_price or 0
+    precio_flete = get_flete_price(s.transportista_id, s.arenera_id)
     price_arena = s.arenera.custom_price or 0
     
     conf = get_config()
@@ -223,13 +223,13 @@ def calculate_shipment_financials(s):
         merma_money = 0.0
 
     # Cálculo final Flete
-    flete_neto = (tn_base_flete * price_flete) - merma_money
+    flete_neto = (tn_base_flete * precio_flete) - merma_money
     
     # CORRECCIÓN IVA: Usamos 0.21 para calcular solo el impuesto
     flete_iva  = max(0, flete_neto * 0.21)
 
     # GRABAMOS SOLO DATOS DE FLETE (Arena se congela al enviar mail)
-    s.frozen_flete_price = price_flete
+    s.frozen_flete_price = precio_flete
     s.frozen_merma_money = merma_money
     s.frozen_flete_neto  = flete_neto
     s.frozen_flete_iva   = flete_iva
@@ -338,6 +338,17 @@ class SystemConfig(db.Model):
     sand_price     = db.Column(db.Float, default=0.0)
     transport_price= db.Column(db.Float, default=0.0)
     admin_email    = db.Column(db.String(120), nullable=True)
+
+class Tariff(db.Model):
+    __tablename__ = "tariff"
+    id = db.Column(db.Integer, primary_key=True)
+    transportista_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    arenera_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    price = db.Column(db.Float, nullable=False, default=0.0)
+    
+    __table_args__ = (
+        db.UniqueConstraint('transportista_id', 'arenera_id', name='uix_tariff_trans_arena'),
+    )
 
 # ----------------------------
 # Bootstrapping DB
@@ -730,8 +741,61 @@ def todos_camiones():
         dfrom=dfrom_str, dto=dto_str
     )
 
-# --- Asegúrate de tener estos imports al inicio de app.py o dentro de la función ---
-from sqlalchemy import cast, Date
+def get_flete_price(transportista_id, arenera_id):
+    # 1. Buscar tarifa específica en la matriz (Transportista X Arenera)
+    t = Tariff.query.filter_by(transportista_id=transportista_id, arenera_id=arenera_id).first()
+    if t and t.price > 0:
+        return t.price
+    
+    # 2. Si no hay específica, usar el precio general del transportista (Fallback)
+    u = db.session.get(User, transportista_id)
+    return u.custom_price if u else 0.0
+
+# --- VISTA: Matriz de Tarifas ---
+@app.route("/admin/tarifas_matrix", methods=["GET", "POST"])
+@login_required
+@role_required("admin")
+def admin_tarifas_matrix():
+    transportistas = User.query.filter_by(tipo="transportista").order_by(User.username).all()
+    areneras = User.query.filter_by(tipo="arenera", parent_id=None).order_by(User.username).all()
+    
+    if request.method == "POST":
+        # Procesamos el formulario: los inputs se llaman "price_{tid}_{aid}"
+        for t in transportistas:
+            for a in areneras:
+                key = f"price_{t.id}_{a.id}"
+                val_str = request.form.get(key, "").strip()
+                
+                # Buscamos si ya existe tarifa
+                tariff = Tariff.query.filter_by(transportista_id=t.id, arenera_id=a.id).first()
+                
+                if val_str:
+                    try:
+                        val = float(val_str)
+                        if not tariff:
+                            tariff = Tariff(transportista_id=t.id, arenera_id=a.id)
+                            db.session.add(tariff)
+                        tariff.price = val
+                    except ValueError:
+                        pass 
+                else:
+                    # Si lo dejan vacío, borramos la tarifa específica (vuelve a usar la general)
+                    if tariff: db.session.delete(tariff)
+        
+        db.session.commit()
+        flash("Matriz de tarifas actualizada correctamente.", "success")
+        return redirect(url_for("admin_tarifas_matrix"))
+
+    # Cargar tarifas existentes para mostrar en la grilla
+    tariffs = Tariff.query.all()
+    matrix = {}
+    for t in tariffs:
+        matrix[(t.transportista_id, t.arenera_id)] = t.price
+
+    return render_template(tpl("admin_tarifas_matrix"), 
+                           transportistas=transportistas, 
+                           areneras=areneras, 
+                           matrix=matrix)
 
 @app.post("/admin/dashboard_data")
 @login_required
@@ -820,7 +884,7 @@ def admin_dashboard_data():
 
     for s in ships_departed:
         # --- CÁLCULO PREVIO (Para saber valores) ---
-        price_flete = s.transportista.custom_price or 0
+        precio_flete = s.transportista.custom_price or 0
         price_arena = s.arenera.custom_price or 0
         peso_salida = s.peso_neto_arenera or 0
         
@@ -841,7 +905,7 @@ def admin_dashboard_data():
                 excess = diff - tol_tn
                 merma_money = excess * price_arena
 
-        flete_neto = (tn_base_flete * price_flete) - merma_money
+        flete_neto = (tn_base_flete * precio_flete) - merma_money
         if s.frozen_flete_neto is not None:
             flete_neto = s.frozen_flete_neto
             
@@ -2380,7 +2444,7 @@ def admin_resumen():
             elif s.frozen_merma_money == 0:
                  diff_tn_visual = 0 
         else:
-            price_flete = s.transportista.custom_price or 0
+            precio_flete = get_flete_price(s.transportista_id, s.arenera_id)
             price_arena = s.arenera.custom_price or 0
             diff = loaded - arrived
             merma_money = 0.0
@@ -2394,7 +2458,7 @@ def admin_resumen():
             else:
                 payable = loaded
 
-            neto = (payable * price_flete) - merma_money
+            neto = (payable * precio_flete) - merma_money
             iva  = max(0, neto * 1.21)
 
         d_cert = s.cert_fecha or s.date
@@ -2596,8 +2660,14 @@ def admin_control_flete():
              loaded  = s.peso_neto_arenera or 0
              arrived = s.final_peso if (s.final_peso and s.final_peso > 0) else (s.sbe_peso_neto or 0)
              
-             # 2. Definir Precio
-             precio_flete = s.frozen_flete_price if s.frozen_flete_price is not None else (s.transportista.custom_price or 0)
+             # 2. Definir Precio (CORREGIDO PARA USAR MATRIZ)
+             # Si ya tiene precio congelado, usamos ese.
+             if s.frozen_flete_price is not None:
+                 precio_flete = s.frozen_flete_price
+             else:
+                 # Si no, buscamos en la matriz (Transporte X Arenera)
+                 precio_flete = get_flete_price(s.transportista_id, s.arenera_id)
+
              precio_arena = s.arenera.custom_price or 0
              
              # 3. BASE IMPONIBLE (Siempre Llegada)
@@ -2704,8 +2774,6 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
 
     # --- LÓGICA DE FILTRADO ---
     if is_salida_mode:
-        # CASO A: ARENERA SALIDA (Filtra por Fecha de Viaje)
-        # No requiere estado 'Certificado' estricto, busca viajes con remito/peso.
         q = q.filter(
             Shipment.arenera_id == target_user.id,
             Shipment.date >= start_date, 
@@ -2715,31 +2783,28 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
             Shipment.status.in_(['Salido a SBE', 'Llego', 'Llegado a SBE', 'Certificado'])
         ).order_by(Shipment.date.asc())
     else:
-        # CASO B: TODOS LOS DEMÁS (Requiere Certificación)
-        # Incluye: Transportistas y Areneras por LLEGADA
         q = q.filter(Shipment.cert_status == "Certificado")
         
         if target_type == 'transportista':
             q = q.filter(Shipment.transportista_id == target_user.id)
-            # Transportistas pueden elegir ver por viaje o por certificación
             if date_mode == 'travel':
                 q = q.filter(Shipment.date >= start_date, Shipment.date <= end_date).order_by(Shipment.date.asc())
             else:
                 q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
         else:
-            # ARENERA POR LLEGADA
             q = q.filter(Shipment.arenera_id == target_user.id)
             q = q.filter(Shipment.cert_fecha >= start_date, Shipment.cert_fecha <= end_date).order_by(Shipment.cert_fecha.asc())
 
     shipments = q.all()
     if not shipments: return None, None, "No hay datos para el rango seleccionado."
 
-    # --- CÁLCULOS (Lógica unificada con la vista web) ---
+    # --- CÁLCULOS ---
     total_tn = 0.0
     subtotal = 0.0
     descuento_dinero = 0.0
     items = []
     
+    # Precio de referencia para el encabezado del PDF (sigue siendo el base)
     ref_price = target_user.custom_price or 0
     conf = get_config()
     tol_tn = conf.tolerance_kg / 1000.0
@@ -2749,14 +2814,22 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
         peso_salida_real = s.peso_neto_arenera or 0
         peso_llegada_real = s.final_peso if (s.final_peso and s.final_peso > 0) else (s.sbe_peso_neto or 0)
 
-        # 2. Precio Unitario (Frozen vs Actual)
+        # 2. Precio Unitario (AQUÍ ESTÁ EL CAMBIO PRINCIPAL)
         use_frozen = False
         precio_unit = 0.0
         
         if target_type == 'transportista':
             use_frozen = (s.frozen_flete_price is not None)
-            precio_unit = s.frozen_flete_price if use_frozen else ref_price
+            
+            if use_frozen:
+                # Si ya está congelado, usamos ese (respetamos historia)
+                precio_unit = s.frozen_flete_price 
+            else:
+                # >>> CAMBIO: Usamos la matriz de tarifas <<<
+                precio_unit = get_flete_price(s.transportista_id, s.arenera_id)
+
         else:
+            # Lógica Arenera (sigue igual)
             use_frozen = (s.frozen_arena_price is not None)
             precio_unit = s.frozen_arena_price if use_frozen else ref_price
 
@@ -2779,7 +2852,7 @@ def _create_pdf_internal(target_id, target_type, start_str, end_str, date_mode):
             neto_linea = (peso_pagable * precio_unit)
 
         else:
-            # Arenera: Depende del tipo
+            # Arenera
             if target_user.cert_type == 'llegada':
                 peso_pagable = peso_llegada_real
             else:
