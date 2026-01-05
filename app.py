@@ -15,7 +15,11 @@ import threading
 import time
 from zoneinfo import ZoneInfo
 from xhtml2pdf import pisa
-from flask_wtf.csrf import CSRFProtect  # Protección CSRF
+from flask_wtf.csrf import CSRFProtect 
+from apscheduler.schedulers.background import BackgroundScheduler
+import atexit
+import re
+
 # ----------------------------
 # CONFIGURACIÓN ZONA HORARIA
 # ----------------------------
@@ -796,6 +800,79 @@ def admin_tarifas_matrix():
                            transportistas=transportistas, 
                            areneras=areneras, 
                            matrix=matrix)
+
+# --- NUEVA VERSIÓN: CORRECCIÓN INDIVIDUAL ---
+@app.route("/admin/fix_dates", methods=["GET", "POST"])
+@login_required
+@role_required("admin")
+def admin_fix_dates():
+    # Paso 1: Mostrar formulario de búsqueda
+    if request.method == "GET":
+        return render_template(tpl("admin_fix_dates"), step="input")
+    
+    action = request.form.get("action")
+    
+    # --- ACCIÓN A: BUSCAR VIAJES ---
+    if action == "preview":
+        raw_remitos = request.form.get("remitos", "")
+        remitos_list = [r.strip() for r in re.split(r'[,\s\n]+', raw_remitos) if r.strip()]
+        
+        if not remitos_list:
+            flash("No ingresaste ningún remito.", "error")
+            return redirect(url_for("admin_fix_dates"))
+            
+        shipments = Shipment.query.filter(Shipment.remito_arenera.in_(remitos_list)).all()
+        return render_template(tpl("admin_fix_dates"), step="confirm", shipments=shipments)
+    
+    # --- ACCIÓN B: GUARDAR CAMBIOS INDIVIDUALES ---
+    elif action == "execute":
+        # 1. Validar Password
+        pwd = request.form.get("password", "").strip()
+        user = db.session.get(User, session["user_id"])
+        
+        if not user or not check_password_hash(user.password_hash, pwd):
+            flash("⛔ Contraseña incorrecta.", "error")
+            # Volvemos a mostrar la pantalla de confirmación simulando el paso anterior
+            # (Truco: para no perder los IDs, idealmente se reenviarían, pero por simplicidad redirigimos)
+            return redirect(url_for("admin_fix_dates"))
+            
+        shipment_ids = request.form.getlist("shipment_ids")
+        if not shipment_ids:
+            return redirect(url_for("admin_fix_dates"))
+
+        count = 0
+        try:
+            for sid in shipment_ids:
+                # Recuperamos la fecha específica de ESTE viaje (input name="date_123")
+                date_str = request.form.get(f"date_{sid}")
+                
+                if date_str:
+                    new_date = date.fromisoformat(date_str)
+                    s = db.session.get(Shipment, int(sid))
+                    if s:
+                        # Solo actualizamos si la fecha es distinta
+                        if s.date != new_date:
+                            s.date = new_date
+                            # Si quieres que esto impacte también en la fecha de certificación (si ya estaba cerrado):
+                            # if s.cert_status == 'Certificado': s.cert_fecha = new_date
+                            count += 1
+            
+            if count > 0:
+                db.session.commit()
+                flash(f"✅ Se actualizaron las fechas de {count} viajes correctamente.", "success")
+            else:
+                flash("No hubo cambios (las fechas eran las mismas).", "info")
+
+        except ValueError:
+            db.session.rollback()
+            flash("Error en el formato de alguna fecha.", "error")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Error general: {e}", "error")
+            
+        return redirect(url_for("admin_fix_dates"))
+    
+    return redirect(url_for("admin_fix_dates"))
 
 @app.post("/admin/dashboard_data")
 @login_required
@@ -3062,6 +3139,121 @@ def send_email_graph(destinatario, asunto, cuerpo, attachment_bytes=None, attach
         raise Exception(f"Error Graph API: {resp.status_code} - {resp.text}")
     return True
 
+# -----------------------------------------------------------
+# AUTOMATIZACIÓN DE CORREOS (VIERNES)
+# -----------------------------------------------------------
+def enviar_alertas_viernes():
+    print("Iniciando proceso de alertas automáticas de Viernes...")
+    
+    with app.app_context():
+        today = get_arg_today()
+        limit_date = today - timedelta(days=2)
+        transportistas = User.query.filter_by(tipo='transportista').all()
+        
+        for t in transportistas:
+            if not t.email: continue
+            
+            pendientes = Shipment.query.filter(
+                Shipment.transportista_id == t.id,
+                Shipment.status == 'En viaje',
+                Shipment.date <= limit_date
+            ).order_by(Shipment.date.asc()).all()
+            
+            if pendientes:
+                filas_html = ""
+                for p in pendientes:
+                    filas_html += f"""
+                    <tr>
+                        <td style="padding:5px; border:1px solid #ccc;">{p.date.strftime('%d/%m/%Y')}</td>
+                        <td style="padding:5px; border:1px solid #ccc;">{p.chofer}</td>
+                        <td style="padding:5px; border:1px solid #ccc;">{p.tractor}</td>
+                        <td style="padding:5px; border:1px solid #ccc;">{p.arenera.username if p.arenera else '-'}</td>
+                    </tr>
+                    """
+                
+                cuerpo = f"""
+                <h3>Alerta de Viajes Demorados</h3>
+                <p>Hola <strong>{t.username}</strong>,</p>
+                <p>Detectamos viajes iniciados hace más de 48hs que <strong>aún figuran 'En viaje'</strong>.</p>
+                <p>Si estos viajes no se realizaron, por favor elimínelos para mantener la cuenta corriente ordenada.</p>
+                
+                <table style="border-collapse: collapse; width: 100%;">
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="padding:8px; border:1px solid #ccc;">Fecha</th>
+                        <th style="padding:8px; border:1px solid #ccc;">Chofer</th>
+                        <th style="padding:8px; border:1px solid #ccc;">Patente</th>
+                        <th style="padding:8px; border:1px solid #ccc;">Destino</th>
+                    </tr>
+                    {filas_html}
+                </table>
+                <p style="font-size:0.8em; color:#666;">Sistema de Control Automático.</p>
+                """
+                
+                try:
+                    send_email_graph(t.email, "⚠️ Recordatorio: Viajes 'En Viaje' viejos", cuerpo)
+                    print(f"📧 Mail enviado a Transportista: {t.username}")
+                except Exception as e:
+                    print(f"❌ Error enviando a {t.username}: {e}")
+
+        areneras = User.query.filter_by(tipo='arenera', parent_id=None).all()
+        
+        for a in areneras:
+            if not a.email: continue
+            pendientes = Shipment.query.filter(
+                Shipment.arenera_id == a.id,
+                Shipment.status == 'En viaje',
+                Shipment.date <= limit_date
+            ).order_by(Shipment.date.asc()).all()
+            
+            if pendientes:
+                filas_html = ""
+                for p in pendientes:
+                    filas_html += f"""
+                    <tr>
+                        <td style="padding:5px; border:1px solid #ccc;">{p.date.strftime('%d/%m/%Y')}</td>
+                        <td style="padding:5px; border:1px solid #ccc;">{p.transportista.username}</td>
+                        <td style="padding:5px; border:1px solid #ccc;">{p.chofer}</td>
+                        <td style="padding:5px; border:1px solid #ccc;">{p.tractor}</td>
+                    </tr>
+                    """
+                
+                # CAMBIO AQUÍ: El texto del mail ahora refleja el posible olvido de carga
+                cuerpo = f"""
+                <h3>Control de Cargas Pendientes</h3>
+                <p>Hola <strong>{a.username}</strong>,</p>
+                <p>Los siguientes camiones se anunciaron hacia su planta hace más de 48hs pero <strong>aún figuran sin Remito ni Peso cargado</strong> ('En viaje').</p>
+                <p><strong>¿Se olvidaron de cargar estos camiones en el sistema?</strong><br>
+                Si ya fueron despachados, por favor ingrese al sistema y cárgueles el peso y remito correspondiente.</p>
+                
+                <table style="border-collapse: collapse; width: 100%;">
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="padding:8px; border:1px solid #ccc;">Fecha Inicio</th>
+                        <th style="padding:8px; border:1px solid #ccc;">Transporte</th>
+                        <th style="padding:8px; border:1px solid #ccc;">Chofer</th>
+                        <th style="padding:8px; border:1px solid #ccc;">Patente</th>
+                    </tr>
+                    {filas_html}
+                </table>
+                <p style="font-size:0.8em; color:#666;">Sistema de Control Automático.</p>
+                """
+                
+                try:
+                    send_email_graph(a.email, "⚠️ Alerta: Camiones 'En Viaje' sin datos de carga", cuerpo)
+                    print(f"📧 Mail enviado a Arenera: {a.username} ({len(pendientes)} viajes)")
+                except Exception as e:
+                    print(f"❌ Error enviando a {a.username}: {e}")
+
+# --- INICIALIZACIÓN DEL SCHEDULER ---
+
+if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+    scheduler = BackgroundScheduler()
+    # Programar para todos los viernes (day_of_week='fri') a las 09:00 AM
+    scheduler.add_job(func=enviar_alertas_viernes, trigger="cron", day_of_week='fri', hour=9)
+    scheduler.start()
+    
+    # Asegurar que se apague correctamente al cerrar la app
+    atexit.register(lambda: scheduler.shutdown())
+    
 if __name__ == "__main__":
     app.run(host=os.getenv("FLASK_HOST", "0.0.0.0"),
             port=int(os.getenv("FLASK_PORT", "5000")),
