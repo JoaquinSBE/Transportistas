@@ -25,4 +25,4 @@ reset_admin.py
 reset_certificados.py
 undo_bad_sync.py
 reset_certificados_by_remito.py
-fix_date.py
+fix_*.py

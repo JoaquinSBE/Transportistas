@@ -806,69 +806,75 @@ def admin_tarifas_matrix():
 @login_required
 @role_required("admin")
 def admin_fix_dates():
-    # Paso 1: Mostrar formulario de búsqueda
+    # Paso 1: Mostrar búsqueda
     if request.method == "GET":
         return render_template(tpl("admin_fix_dates"), step="input")
     
     action = request.form.get("action")
     
-    # --- ACCIÓN A: BUSCAR VIAJES ---
+    # --- ACCIÓN A: BUSCAR ---
     if action == "preview":
         raw_remitos = request.form.get("remitos", "")
         remitos_list = [r.strip() for r in re.split(r'[,\s\n]+', raw_remitos) if r.strip()]
         
         if not remitos_list:
-            flash("No ingresaste ningún remito.", "error")
+            flash("No ingresaste remitos.", "error")
             return redirect(url_for("admin_fix_dates"))
             
         shipments = Shipment.query.filter(Shipment.remito_arenera.in_(remitos_list)).all()
         return render_template(tpl("admin_fix_dates"), step="confirm", shipments=shipments)
     
-    # --- ACCIÓN B: GUARDAR CAMBIOS INDIVIDUALES ---
+    # --- ACCIÓN B: GUARDAR ---
     elif action == "execute":
-        # 1. Validar Password
+        # 1. Seguridad
         pwd = request.form.get("password", "").strip()
         user = db.session.get(User, session["user_id"])
-        
         if not user or not check_password_hash(user.password_hash, pwd):
             flash("⛔ Contraseña incorrecta.", "error")
-            # Volvemos a mostrar la pantalla de confirmación simulando el paso anterior
-            # (Truco: para no perder los IDs, idealmente se reenviarían, pero por simplicidad redirigimos)
             return redirect(url_for("admin_fix_dates"))
             
         shipment_ids = request.form.getlist("shipment_ids")
-        if not shipment_ids:
-            return redirect(url_for("admin_fix_dates"))
-
         count = 0
+        
         try:
             for sid in shipment_ids:
-                # Recuperamos la fecha específica de ESTE viaje (input name="date_123")
-                date_str = request.form.get(f"date_{sid}")
-                
-                if date_str:
-                    new_date = date.fromisoformat(date_str)
-                    s = db.session.get(Shipment, int(sid))
-                    if s:
-                        # Solo actualizamos si la fecha es distinta
-                        if s.date != new_date:
-                            s.date = new_date
-                            # Si quieres que esto impacte también en la fecha de certificación (si ya estaba cerrado):
-                            # if s.cert_status == 'Certificado': s.cert_fecha = new_date
+                s = db.session.get(Shipment, int(sid))
+                if s:
+                    # A. Actualizar Fecha de Viaje (Siempre requerida)
+                    new_viaje_str = request.form.get(f"date_{sid}")
+                    if new_viaje_str:
+                        new_viaje_date = date.fromisoformat(new_viaje_str)
+                        if s.date != new_viaje_date:
+                            s.date = new_viaje_date
+                            count += 1
+
+                    # B. Actualizar Fecha Certificación (Puede ser vacía)
+                    new_cert_str = request.form.get(f"cert_date_{sid}")
+                    
+                    if new_cert_str:
+                        # Si el usuario puso una fecha
+                        new_cert_date = date.fromisoformat(new_cert_str)
+                        if s.cert_fecha != new_cert_date:
+                            s.cert_fecha = new_cert_date
+                            count += 1
+                    else:
+                        # Si el usuario dejó el campo vacío -> Borramos la fecha (None)
+                        # Solo si antes tenía fecha, para contar el cambio
+                        if s.cert_fecha is not None:
+                            s.cert_fecha = None
                             count += 1
             
             if count > 0:
                 db.session.commit()
-                flash(f"✅ Se actualizaron las fechas de {count} viajes correctamente.", "success")
+                flash(f"✅ Se actualizaron fechas en {len(shipment_ids)} registros procesados.", "success")
             else:
-                flash("No hubo cambios (las fechas eran las mismas).", "info")
+                flash("No hubo cambios en las fechas.", "info")
 
         except ValueError:
-            db.session.rollback()
-            flash("Error en el formato de alguna fecha.", "error")
+            flash("Error de formato en alguna fecha.", "error")
         except Exception as e:
             db.session.rollback()
-            flash(f"Error general: {e}", "error")
+            flash(f"Error: {e}", "error")
             
         return redirect(url_for("admin_fix_dates"))
     
@@ -891,7 +897,7 @@ def admin_dashboard_data():
     # B. OBTENCIÓN DE DATOS
     # ---------------------------------------------------------
 
-    # 1. SALIDAS (Base para Areneras y Finanzas)
+    # 1. SALIDAS (Base para Areneras, Finanzas y Promedios)
     q_dep = db.session.query(Shipment).filter(Shipment.date >= dfrom, Shipment.date <= dto)
     if arenera_id and str(arenera_id) != "all":
         q_dep = q_dep.filter(Shipment.arenera_id == int(arenera_id))
@@ -922,7 +928,7 @@ def admin_dashboard_data():
         top_trans_map[t_name] = top_trans_map.get(t_name, 0) + peso
 
     # ---------------------------------------------------------
-    # D. GRÁFICO
+    # D. GRÁFICO DIARIO
     # ---------------------------------------------------------
     delta_days = (fecha_corte - dfrom).days
     if delta_days < 0: delta_days = -1
@@ -944,7 +950,7 @@ def admin_dashboard_data():
                 daily_stats[d_str]["in"] += (s.sbe_peso_neto or s.final_peso or 0)
 
     # ---------------------------------------------------------
-    # E. KPIs Y FINANZAS (AGRUPADO POR SEMANA)
+    # E. KPIs, FINANZAS Y PROMEDIOS
     # ---------------------------------------------------------
     tn_out_total = sum(v["out"] for v in daily_stats.values())
     tn_in_total  = sum(v["in"] for v in daily_stats.values())
@@ -959,22 +965,28 @@ def admin_dashboard_data():
     conf = get_config()
     tol_tn = conf.tolerance_kg / 1000.0
 
+    # -- VARIABLES PARA PROMEDIO PONDERADO --
+    sum_prod_flete = 0
+    sum_peso_flete = 0
+    sum_prod_arena = 0
+    sum_peso_arena = 0
+    # ---------------------------------------
+
     for s in ships_departed:
-        # --- CÁLCULO PREVIO (Para saber valores) ---
+        # 1. Definir valores base del viaje
         precio_flete = s.transportista.custom_price or 0
         price_arena = s.arenera.custom_price or 0
         peso_salida = s.peso_neto_arenera or 0
-        
-        # Prioridad peso SBE, si no existe, usa salida
         peso_llegada = s.sbe_peso_neto if (s.sbe_peso_neto and s.sbe_peso_neto > 0) else peso_salida
         
-        # 1. FLETE
+        # --- CÁLCULO DE FINANZAS (Flujo de Caja) ---
+        
+        # A. FLETE
         tn_base_flete = 0.0
         merma_money = 0.0
 
         if s.arenera.cert_type == 'llegada':
             tn_base_flete = peso_llegada
-            merma_money = 0.0 
         else:
             tn_base_flete = peso_salida
             diff = peso_salida - peso_llegada
@@ -988,12 +1000,8 @@ def admin_dashboard_data():
             
         flete_iva = max(0, flete_neto * 1.21)
         
-        # 2. ARENA
-        peso_arena_calc = 0
-        if s.arenera.cert_type == 'llegada':
-            peso_arena_calc = peso_llegada # Paga lo que llega
-        else:
-            peso_arena_calc = peso_salida  # Paga lo que sale
+        # B. ARENA
+        peso_arena_calc = peso_llegada if s.arenera.cert_type == 'llegada' else peso_salida
             
         neto_arena = peso_arena_calc * price_arena
         if s.frozen_arena_price is not None:
@@ -1001,52 +1009,55 @@ def admin_dashboard_data():
              
         iva_arena = max(0, neto_arena * 1.21)
 
-        # --- ACUMULACIÓN CONDICIONAL (NORMALIZADA AL LUNES) ---
-
-        # A. FLETE (Solo si está certificado)
+        # --- ACUMULACIÓN DE PAGOS (Solo Certificados) ---
         if s.cert_status == "Certificado" and s.cert_fecha:
             total_costo_proyectado += flete_iva 
-            
             if s.frozen_flete_iva and s.frozen_flete_iva > 0:
-                # 1. Normalizar al Lunes de la semana de certificación
                 lunes_base = s.cert_fecha - timedelta(days=s.cert_fecha.weekday())
-                
-                # 2. Calcular vencimiento sumando días al Lunes Base
                 d_pay = lunes_base + timedelta(days=(s.transportista.payment_days or 30))
-                
                 payments_detail.append({
-                    "raw": d_pay, 
-                    "fecha": d_pay.strftime("%d/%m/%Y"),
-                    "monto": s.frozen_flete_iva, 
-                    "entidad": s.transportista.username, 
-                    "tipo": "Flete",
-                    "dia_semana": "Semana del " + lunes_base.strftime("%d/%m")
+                    "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
+                    "monto": s.frozen_flete_iva, "entidad": s.transportista.username, 
+                    "tipo": "Flete", "dia_semana": "Semana del " + lunes_base.strftime("%d/%m")
                 })
         
-        # B. ARENA (Solo si tiene mail enviado)
         if s.frozen_arena_price is not None:
              total_costo_proyectado += iva_arena
-
-             # Referencia: Fecha certificación o fecha viaje
              ref_date = s.cert_fecha or s.date
-             
-             # 1. Normalizar al Lunes de la semana
              lunes_base = ref_date - timedelta(days=ref_date.weekday())
-
-             # 2. Calcular vencimiento sumando días al Lunes Base
              d_pay = lunes_base + timedelta(days=(s.arenera.payment_days or 30))
-             
-             # Valor real
              monto_arena_final = (peso_arena_calc * s.frozen_arena_price) * 1.21
-             
              payments_detail.append({
-                "raw": d_pay, 
-                "fecha": d_pay.strftime("%d/%m/%Y"),
-                "monto": monto_arena_final, 
-                "entidad": s.arenera.username, 
-                "tipo": "Arena",
-                "dia_semana": "Semana del " + lunes_base.strftime("%d/%m")
+                "raw": d_pay, "fecha": d_pay.strftime("%d/%m/%Y"),
+                "monto": monto_arena_final, "entidad": s.arenera.username, 
+                "tipo": "Arena", "dia_semana": "Semana del " + lunes_base.strftime("%d/%m")
             })
+
+        # --- CÁLCULO DE PROMEDIOS PONDERADOS ---
+        # Usamos peso llegada si existe (más real), sino salida
+        peso_real = peso_llegada if peso_llegada > 0 else peso_salida
+        
+        if peso_real > 0:
+            # Ponderado Flete
+            p_flete_val = s.frozen_flete_price if (s.frozen_flete_price and s.frozen_flete_price > 0) else get_flete_price(s.transportista_id, s.arenera_id) or 0
+            if p_flete_val > 0:
+                sum_prod_flete += (p_flete_val * peso_real)
+                sum_peso_flete += peso_real
+            
+            # Ponderado Arena
+            p_arena_val = s.frozen_arena_price if (s.frozen_arena_price and s.frozen_arena_price > 0) else (s.arenera.custom_price or 0)
+            if p_arena_val > 0:
+                sum_prod_arena += (p_arena_val * peso_real)
+                sum_peso_arena += peso_real
+
+    # Resultado Final Promedios
+    avg_flete = (sum_prod_flete / sum_peso_flete) if sum_peso_flete > 0 else 0
+    avg_arena = (sum_prod_arena / sum_peso_arena) if sum_peso_arena > 0 else 0
+    
+    # Formateo String para Dashboard ($ 1,234.00)
+    kpi_avg_flete = f"$ {avg_flete:,.2f}"
+    kpi_avg_arena = f"$ {avg_arena:,.2f}"
+
 
     # --- F. JSON FINAL ---
     sorted_days = sorted(daily_stats.keys())
@@ -1056,7 +1067,6 @@ def admin_dashboard_data():
 
     pay_map = {}
     for p in payments_detail:
-        # Agrupamos por Fecha Vencimiento + Entidad + Tipo
         k = f"{p['raw']}_{p['entidad']}_{p['tipo']}"
         if k not in pay_map: pay_map[k] = {**p, "count": 0, "monto": 0}
         pay_map[k]["monto"] += p["monto"]
@@ -1075,7 +1085,10 @@ def admin_dashboard_data():
             "to_source": to_source,
             "to_dest": to_dest,
             "arrived": arrived,
-            "tn_to_dest": sum(s.peso_neto_arenera or 0 for s in ships_departed if s.peso_neto_arenera and not s.sbe_fecha_llegada)
+            "tn_to_dest": sum(s.peso_neto_arenera or 0 for s in ships_departed if s.peso_neto_arenera and not s.sbe_fecha_llegada),
+            # Nuevos KPIs Ponderados
+            "avg_flete": kpi_avg_flete,
+            "avg_arena": kpi_avg_arena
         },
         "chart_data": { "labels": chart_labels, "out": data_out, "in": data_in },
         "payments_table": payments_final,
@@ -2317,7 +2330,7 @@ def admin_export():
 
     q = Shipment.query
     
-    # Aplicar filtros de fecha si existen
+    # Aplicar filtros de fecha
     if start_str:
         try:
             start_date = date.fromisoformat(start_str)
@@ -2336,60 +2349,62 @@ def admin_export():
     # Ordenar cronológicamente
     q = q.order_by(Shipment.date.desc(), Shipment.id.desc())
     
-    # Ejecutar consulta
     rows = q.all()
 
-    # 2. Crear Libro de Excel
+    # 2. Crear Excel
     wb = Workbook()
     ws = wb.active
     ws.title = "Historial Detallado"
 
-    # 3. Definir Encabezados Enriquecidos
+    # 3. Encabezados
     headers = [
-        "ID Viaje",
-        "Fecha Salida (Arenera)",
-        "Fecha Llegada (SBE)",
-        "Arenera (Origen)",
-        "Transportista",
-        "Chofer",
-        "DNI Chofer",
-        "Patente Tractor (Decl)",
-        "Patente Batea (Decl)",
-        "Tipo Camión",
-        "Remito Origen",
-        "Peso Salida (Tn)",
-        "Remito Destino (SBE)",
-        "Peso Llegada SBE (Tn)",
-        "Estado Actual",
-        "Estado Certificación",
-        "Fecha Certificación",
-        "Observaciones"
+        "ID Viaje", "Fecha Salida", "Fecha Llegada SBE",
+        "Arenera", "Transportista",
+        "Chofer", "DNI", "Patente Tractor", "Patente Batea", "Tipo",
+        "Remito Origen", "Peso Salida",
+        "Remito SBE", "Peso Llegada",
+        "Precio Flete (Ref)", # Cambié el nombre a Ref para indicar que puede ser el actual
+        "Precio Arena (Ref)", 
+        "Estado Actual", "Estado Certif.", "Fecha Certif.", "Observaciones"
     ]
     ws.append(headers)
 
     # 4. Rellenar Filas
     for s in rows:
-        # Formato de Fechas
-        f_salida = s.date.strftime("%d/%m/%Y")
-        f_llegada = s.sbe_fecha_llegada.strftime("%d/%m/%Y %H:%M") if s.sbe_fecha_llegada else "-"
-        f_certif = s.cert_fecha.strftime("%d/%m/%Y") if s.cert_fecha else "-"
+        val_salida  = s.date
+        val_llegada = s.sbe_fecha_llegada 
+        val_cert    = s.cert_fecha        
 
-        # Nombres de empresas (Manejo de nulos)
+        # Nombres
         arenera_name = s.arenera.username if s.arenera else "N/A"
-        trans_name = s.transportista.username if s.transportista else "N/A"
+        trans_name   = s.transportista.username if s.transportista else "N/A"
 
-        # Pesos (Manejo de nulos)
-        peso_salida = s.peso_neto_arenera if s.peso_neto_arenera is not None else 0
+        # Pesos
+        peso_salida  = s.peso_neto_arenera if s.peso_neto_arenera is not None else 0
         peso_llegada = s.sbe_peso_neto if s.sbe_peso_neto is not None else 0
         
+        # --- LÓGICA DE PRECIOS CON FALLBACK ---
+        # 1. Flete: Si tiene congelado > 0 lo usa, sino busca en la matriz actual
+        if s.frozen_flete_price and s.frozen_flete_price > 0:
+            p_flete = s.frozen_flete_price
+        else:
+            p_flete = get_flete_price(s.transportista_id, s.arenera_id)
+
+        # 2. Arena: Si tiene congelado > 0 lo usa, sino usa el precio actual del perfil
+        if s.frozen_arena_price and s.frozen_arena_price > 0:
+            p_arena = s.frozen_arena_price
+        else:
+            p_arena = s.arenera.custom_price or 0
+        # --------------------------------------
+
         # Remitos
         remito_orig = s.remito_arenera or "-"
-        remito_dest = s.sbe_remito or "-" # Usamos sbe_remito o final_remito si prefieres lo certificado
+        remito_dest = s.sbe_remito or "-"
 
         ws.append([
             s.id,
-            f_salida,
-            f_llegada,
+            val_salida,    
+            val_llegada,   
             arenera_name,
             trans_name,
             s.chofer,
@@ -2401,13 +2416,23 @@ def admin_export():
             peso_salida,
             remito_dest,
             peso_llegada,
+            p_flete,   # Ahora nunca será 0 si tienes tarifas cargadas
+            p_arena,   # Idem
             s.status,
             s.cert_status,
-            f_certif,
+            val_cert,      
             s.observation_reason or ""
         ])
 
-    # 5. Ajuste Automático de Ancho de Columnas
+        # Formato de celdas
+        curr_row = ws.max_row
+        ws.cell(row=curr_row, column=2).number_format = 'dd/mm/yyyy'
+        if val_llegada:
+            ws.cell(row=curr_row, column=3).number_format = 'dd/mm/yyyy hh:mm'
+        if val_cert:
+            ws.cell(row=curr_row, column=19).number_format = 'dd/mm/yyyy'
+
+    # 5. Ajuste Ancho
     for col in ws.columns:
         max_length = 0
         column = col[0].column_letter
@@ -2416,12 +2441,9 @@ def admin_export():
                 if len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
             except: pass
-        adjusted_width = (max_length + 2)
-        # Límite máximo para que no queden columnas gigantes
-        if adjusted_width > 50: adjusted_width = 50
-        ws.column_dimensions[column].width = adjusted_width
+        ws.column_dimensions[column].width = min(max_length + 2, 50)
 
-    # 6. Guardar en memoria y enviar
+    # 6. Guardar
     bio = io.BytesIO()
     wb.save(bio)
     bio.seek(0)

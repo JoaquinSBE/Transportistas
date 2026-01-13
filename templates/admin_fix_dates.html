@@ -2,128 +2,298 @@
 <html lang="es" data-bs-theme="light">
   <head>
     <meta charset="utf-8" />
-    <title>Corregir Fechas | Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gestión de Fechas | Admin</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+
     <style>
+      :root {
+        --bs-font-sans-serif: "Inter", sans-serif;
+        --bs-primary: #2563eb;
+        --bs-body-bg: #f3f4f6;
+        --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1),
+          0 1px 2px -1px rgb(0 0 0 / 0.1);
+        --card-radius: 12px;
+      }
+
       body {
-        background-color: #f3f4f6;
-        font-family: sans-serif;
+        font-family: var(--bs-font-sans-serif);
+        background-color: var(--bs-body-bg);
         padding-bottom: 60px;
       }
-      .card-custom {
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        background: #fff;
+
+      /* --- NAVBAR --- */
+      .navbar-glass {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid #e5e7eb;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
       }
-      .step-title {
-        font-size: 0.85rem;
+      .brand-logo {
+        font-weight: 700;
+        color: #111827;
+        letter-spacing: -0.5px;
+      }
+
+      /* --- CARDS --- */
+      .card-custom {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: var(--card-radius);
+        box-shadow: var(--card-shadow);
+        margin-bottom: 1.5rem;
+      }
+      .card-header-custom {
+        background: transparent;
+        border-bottom: 1px solid #f3f4f6;
+        padding: 1rem 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .card-header-custom h3 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin: 0;
+        color: #374151;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: #6b7280;
-        font-weight: 700;
-        margin-bottom: 1rem;
       }
-      .date-input-sm {
-        font-weight: bold;
-        color: #2563eb;
-        border: 1px solid #93c5fd;
+
+      /* --- INPUTS DE FECHA PERSONALIZADOS --- */
+      .date-viaje {
+        font-weight: 600;
+        color: #1d4ed8; /* Azul oscuro */
+        border: 1px solid #bfdbfe;
         background-color: #eff6ff;
+        font-size: 0.85rem;
+      }
+      .date-viaje:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      }
+
+      .date-cert {
+        font-weight: 600;
+        color: #15803d; /* Verde oscuro */
+        border: 1px solid #bbf7d0;
+        background-color: #f0fdf4;
+        font-size: 0.85rem;
+      }
+      .date-cert:focus {
+        border-color: #16a34a;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+      }
+
+      /* --- TABLA --- */
+      .table-custom th {
+        background-color: #f9fafb;
+        color: #6b7280;
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-bottom: 1px solid #e5e7eb;
+        padding: 0.75rem 1rem;
+      }
+      .table-custom td {
+        vertical-align: middle;
+        padding: 0.75rem 1rem;
+        color: #374151;
+        font-size: 0.9rem;
+        border-bottom: 1px solid #f3f4f6;
       }
     </style>
   </head>
   <body>
-    <div class="container py-5" style="max-width: 900px">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="h4 fw-bold text-dark">
-          <i class="fa-solid fa-calendar-pen text-danger me-2"></i>Corrección
-          Individual
-        </h2>
-        <a
-          href="{{ url_for('admin_panel') }}"
-          class="btn btn-sm btn-outline-secondary"
-          >Volver al Panel</a
-        >
+    <nav class="navbar navbar-expand-lg navbar-glass mb-4">
+      <div class="container-xl">
+        <a class="navbar-brand brand-logo" href="#">
+          <i class="fa-solid fa-calendar-pen text-primary me-2"></i>Gestión de
+          <span class="text-primary">Fechas</span>
+        </a>
+
+        <div class="d-flex gap-2 align-items-center ms-auto">
+          <a
+            href="{{ url_for('admin_panel') }}"
+            class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"
+          >
+            <i class="fa-solid fa-arrow-left"></i>
+            <span class="d-none d-sm-inline">Volver</span>
+          </a>
+        </div>
       </div>
+    </nav>
 
+    <div class="container-xl">
       {% if step == 'input' %}
-      <div class="card-custom p-4">
-        <div class="step-title">Paso 1: Identificar Viajes</div>
-        <form method="POST">
-          <input type="hidden" name="action" value="preview" />
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <div class="row justify-content-center">
+        <div class="col-lg-8">
+          <div class="card-custom">
+            <div class="card-header-custom">
+              <h3>
+                <i class="fa-solid fa-magnifying-glass me-2 text-muted"></i
+                >Buscar Viajes
+              </h3>
+            </div>
+            <div class="p-4">
+              <form method="POST">
+                <input type="hidden" name="action" value="preview" />
+                <input
+                  type="hidden"
+                  name="csrf_token"
+                  value="{{ csrf_token() }}"
+                />
 
-          <div class="mb-3">
-            <label class="form-label fw-bold">Remitos a Corregir</label>
-            <textarea
-              name="remitos"
-              class="form-control font-monospace"
-              rows="5"
-              placeholder="Pega aquí los números de remito (separados por coma)..."
-              required
-            ></textarea>
-            <div class="form-text">
-              El sistema buscará estos remitos para que puedas editar sus fechas
-              individualmente.
+                <div class="mb-3">
+                  <label class="form-label fw-medium text-dark"
+                    >Números de Remito</label
+                  >
+                  <textarea
+                    name="remitos"
+                    class="form-control font-monospace bg-light"
+                    rows="6"
+                    placeholder="Ej: 0001-00002546, 132225 (Separados por coma)"
+                    required
+                  ></textarea>
+                  <div class="form-text mt-2">
+                    <i class="fa-regular fa-circle-question me-1"></i>
+                    Ingresa los remitos de arenera para localizar los viajes y
+                    editar sus fechas.
+                  </div>
+                </div>
+
+                <div class="text-end">
+                  <button type="submit" class="btn btn-primary px-4 fw-medium">
+                    Continuar <i class="fa-solid fa-arrow-right ms-2"></i>
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-
-          <div class="text-end">
-            <button type="submit" class="btn btn-primary">
-              <i class="fa-solid fa-magnifying-glass me-2"></i>Buscar Viajes
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
-      {% endif %} {% if step == 'confirm' %}
-      <div class="card-custom p-4 border-warning">
-        <div class="step-title text-warning">Paso 2: Asignar Fechas</div>
+      {% endif %}
 
-        {% if shipments %}
-        <div class="alert alert-info">
-          <i class="fa-solid fa-pencil me-2"></i>Se encontraron
-          <strong>{{ shipments|length }}</strong> viajes. Edita la fecha de cada
-          uno según corresponda.
+      {% if step == 'confirm' %}
+      <div class="card-custom border-top-0">
+        <div class="card-header-custom">
+          <h3>
+            <i class="fa-solid fa-pen-to-square me-2 text-warning"></i
+            >Resultados de Búsqueda
+          </h3>
+          <span class="badge bg-secondary rounded-pill"
+            >{{ shipments|length }} Viajes</span
+          >
         </div>
 
-        <form method="POST" class="bg-white rounded">
+        {% if shipments %}
+        <div class="alert alert-light m-3 border-start border-4 border-info">
+          <div class="d-flex">
+            <i class="fa-solid fa-circle-info text-info mt-1 me-3"></i>
+            <div>
+              <small class="text-muted d-block"
+                ><strong>Instrucciones:</strong> Modifica las fechas en las
+                columnas correspondientes.</small
+              >
+              <small class="text-muted"
+                >Si dejas la
+                <strong class="text-success">Fecha Certificación</strong> vacía,
+                el viaje pasará a estado "No Certificado".</small
+              >
+            </div>
+          </div>
+        </div>
+
+        <form method="POST">
           <input type="hidden" name="action" value="execute" />
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 
-          <div class="table-responsive mb-4 border rounded">
-            <table class="table table-hover mb-0 align-middle">
-              <thead class="table-light">
+          <div class="table-responsive">
+            <table class="table table-custom mb-0">
+              <thead>
                 <tr>
-                  <th style="width: 5%">ID</th>
-                  <th style="width: 15%">Remito</th>
-                  <th style="width: 20%">Arenera</th>
-                  <th style="width: 25%">Transportista</th>
-                  <th style="width: 35%">Nueva Fecha de Salida</th>
+                  <th class="ps-4">Detalles del Viaje</th>
+                  <th>Transportista</th>
+                  <th>Estado Actual</th>
+                  <th style="width: 180px">
+                    <i class="fa-regular fa-calendar me-1 text-primary"></i
+                    >Fecha Salida
+                  </th>
+                  <th style="width: 180px">
+                    <i class="fa-solid fa-certificate me-1 text-success"></i
+                    >Fecha Certif.
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {% for s in shipments %}
                 <tr>
-                  <td class="text-muted small">#{{ s.id }}</td>
-                  <td class="font-monospace fw-bold">{{ s.remito_arenera }}</td>
-                  <td class="small">{{ s.arenera.username }}</td>
-                  <td class="small">{{ s.transportista.username }}</td>
+                  <td class="ps-4">
+                    <div class="fw-bold text-dark font-monospace">
+                      {{ s.remito_arenera }}
+                    </div>
+                    <div class="text-muted small">
+                      <i class="fa-solid fa-location-dot me-1 text-secondary"></i
+                      >{{ s.arenera.username }}
+                    </div>
+                    <div class="text-muted small" style="font-size: 0.75rem">
+                      ID: #{{ s.id }}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <div
+                        class="bg-light rounded-circle d-flex align-items-center justify-content-center me-2"
+                        style="width: 32px; height: 32px"
+                      >
+                        <i class="fa-solid fa-truck text-secondary"></i>
+                      </div>
+                      <span class="fw-medium">{{ s.transportista.username }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    {% if s.cert_status == 'Certificado' %}
+                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Certificado</span>
+                    {% else %}
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">{{ s.cert_status }}</span>
+                    {% endif %}
+                  </td>
+
                   <td>
                     <input
                       type="date"
                       name="date_{{ s.id }}"
-                      class="form-control form-control-sm date-input-sm"
+                      class="form-control form-control-sm date-viaje"
                       value="{{ s.date.isoformat() }}"
                       required
                     />
+                  </td>
 
+                  <td class="pe-4">
+                    <input
+                      type="date"
+                      name="cert_date_{{ s.id }}"
+                      class="form-control form-control-sm date-cert"
+                      value="{{ s.cert_fecha.isoformat() if s.cert_fecha else '' }}"
+                      placeholder="Sin fecha"
+                    />
                     <input
                       type="hidden"
                       name="shipment_ids"
@@ -136,53 +306,57 @@
             </table>
           </div>
 
-          <div class="bg-light p-3 rounded border mt-3">
-            <div class="row align-items-center">
-              <div class="col-md-7">
-                <small class="text-muted"
-                  ><i class="fa-solid fa-lock me-1"></i>Esta acción es
-                  irreversible y recalculará los reportes.</small
+          <div class="p-4 bg-light border-top mt-0">
+            <div class="row align-items-center justify-content-end g-3">
+              <div class="col-auto">
+                <span class="text-muted small me-2"
+                  ><i class="fa-solid fa-shield-halved me-1"></i>Seguridad de
+                  Admin</span
                 >
               </div>
-              <div class="col-md-5">
-                <div class="input-group">
-                  <input
-                    type="password"
-                    name="password"
-                    class="form-control"
-                    placeholder="Contraseña Admin..."
-                    required
-                  />
-                  <button type="submit" class="btn btn-danger fw-bold">
-                    <i class="fa-solid fa-save me-2"></i>Guardar Cambios
-                  </button>
-                </div>
+              <div class="col-auto">
+                <input
+                  type="password"
+                  name="password"
+                  class="form-control"
+                  placeholder="Contraseña..."
+                  required
+                  style="width: 200px"
+                />
               </div>
-            </div>
-            <div class="text-end mt-2">
-              <a
-                href="{{ url_for('admin_fix_dates') }}"
-                class="text-decoration-none small text-muted"
-                >Cancelar y volver</a
-              >
+              <div class="col-auto">
+                <a
+                  href="{{ url_for('admin_fix_dates') }}"
+                  class="btn btn-link text-decoration-none text-muted"
+                  >Cancelar</a
+                >
+                <button type="submit" class="btn btn-primary fw-medium px-4">
+                  <i class="fa-solid fa-floppy-disk me-2"></i>Guardar Cambios
+                </button>
+              </div>
             </div>
           </div>
         </form>
         {% else %}
         <div class="text-center py-5">
-          <div class="text-muted mb-3">
-            <i class="fa-regular fa-folder-open fa-2x"></i>
+          <div class="mb-3 text-muted opacity-50">
+            <i class="fa-solid fa-magnifying-glass fa-3x"></i>
           </div>
-          <h4 class="h6">No se encontraron viajes.</h4>
+          <h5 class="text-dark fw-medium">No se encontraron resultados</h5>
+          <p class="text-muted small">
+            Verifica los números de remito ingresados.
+          </p>
           <a
             href="{{ url_for('admin_fix_dates') }}"
-            class="btn btn-primary mt-2"
-            >Volver a intentar</a
+            class="btn btn-outline-primary btn-sm mt-2"
+            >Intentar de nuevo</a
           >
         </div>
         {% endif %}
       </div>
       {% endif %}
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   </body>
 </html>

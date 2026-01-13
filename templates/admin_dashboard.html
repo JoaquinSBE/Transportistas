@@ -32,7 +32,7 @@
     .card-title-custom { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; color: #6b7280; margin: 0; letter-spacing: 0.05em; }
 
     /* KPIs */
-    .kpi-value { font-size: 1.8rem; font-weight: 700; color: #111827; line-height: 1.2; }
+    .kpi-value { font-size: 1.6rem; font-weight: 700; color: #111827; line-height: 1.2; }
     .kpi-sub { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; }
     
     /* Listas */
@@ -109,7 +109,7 @@
 
     <div class="row g-3 mb-4">
       
-      <div class="col-sm-6 col-lg-3">
+      <div class="col-sm-6 col-lg-4">
         <div class="card-custom p-3 border-start border-4 border-secondary">
           <div class="d-flex justify-content-between">
             <div>
@@ -121,7 +121,7 @@
         </div>
       </div>
 
-      <div class="col-sm-6 col-lg-3">
+      <div class="col-sm-6 col-lg-4">
         <div class="card-custom p-3 border-start border-4 border-warning">
           <div class="d-flex justify-content-between">
             <div>
@@ -138,32 +138,55 @@
         </div>
       </div>
 
-      <div class="col-sm-6 col-lg-3">
+      <div class="col-sm-6 col-lg-4">
         <div class="card-custom p-3 border-start border-4 border-success">
           <div class="d-flex justify-content-between">
             <div>
               <div class="kpi-sub text-success">Descargados SBE</div>
-              
               <div class="d-flex align-items-baseline">
                 <div class="kpi-value" id="k_arrived">0</div> 
                 <small class="text-muted fw-bold ms-2" style="font-size:0.9rem">
                     (<span id="k_tn_arrived">0</span> Tn)
                 </small>
               </div>
-              
             </div>
+            <div class="text-success opacity-25"><i class="fa-solid fa-check-double fa-2x"></i></div>
           </div>
         </div>
       </div>
 
-      <div class="col-sm-6 col-lg-3">
-        <div class="card-custom p-3 border-start border-4 border-primary">
+      <div class="col-sm-6 col-lg-4">
+          <div class="card-custom p-3 border-start border-4 border-primary">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <div class="kpi-sub text-primary">Promedio Flete Ponderado</div>
+                <div class="kpi-value text-primary" id="k_avg_flete" style="font-size: 1.4rem;">$ 0</div>
+              </div>
+              <div class="text-primary opacity-25"><i class="fa-solid fa-file-invoice-dollar fa-2x"></i></div>
+            </div>
+          </div>
+      </div>
+
+      <div class="col-sm-6 col-lg-4">
+          <div class="card-custom p-3 border-start border-4 border-warning">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <div class="kpi-sub text-warning">Promedio Arena Ponderado</div>
+                <div class="kpi-value text-warning" id="k_avg_arena" style="font-size: 1.4rem;">$ 0</div>
+              </div>
+              <div class="text-warning opacity-25"><i class="fa-solid fa-mound fa-2x"></i></div>
+            </div>
+          </div>
+      </div>
+
+      <div class="col-sm-6 col-lg-4">
+        <div class="card-custom p-3 border-start border-4 border-dark">
           <div class="d-flex justify-content-between">
             <div>
-              <div class="kpi-sub text-primary">Total Proyectado</div>
+              <div class="kpi-sub text-dark">Total Proyectado (IVA Inc.)</div>
               <div class="kpi-value text-dark" id="k_money" style="font-size:1.5rem">$0</div>
             </div>
-            <div class="text-primary opacity-25"><i class="fa-solid fa-sack-dollar fa-2x"></i></div>
+            <div class="text-dark opacity-25"><i class="fa-solid fa-sack-dollar fa-2x"></i></div>
           </div>
         </div>
       </div>
@@ -251,16 +274,14 @@
       btnRefresh.disabled = true;
 
       try {
-        // --- AQUÍ ESTÁ EL CAMBIO DE SEGURIDAD ---
-        
-        // 1. Leer el token de la etiqueta <meta>
+        // TOKEN CSRF
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
         const res = await fetch('{{ url_for("admin_dashboard_data") }}', {
           method: 'POST', 
           headers: {
               'Content-Type': 'application/json',
-              'X-CSRFToken': csrfToken  // 2. Enviarlo en los headers
+              'X-CSRFToken': csrfToken
           }, 
           body: JSON.stringify({
             range: rangeSelect.value,
@@ -283,26 +304,30 @@
 
       } catch (e) { 
         console.error(e);
-        alert('Error cargando datos');
+        // alert('Error cargando datos');
       } finally {
         btnRefresh.innerHTML = '<i class="fa-solid fa-rotate me-1"></i> Actualizar';
         btnRefresh.disabled = false;
       }
     }
 
-    // --- ACTUALIZAR TARJETAS (NUEVA LÓGICA) ---
+    // --- ACTUALIZAR TARJETAS (KPIs) ---
     function updateKpiDisplay() {
         if (!currentData) return;
         const k = currentData.kpi;
 
-        // Mapeo directo de las variables calculadas en Python
+        // Físicos
         animateValue('k_to_source', k.to_source);
         animateValue('k_to_dest', k.to_dest);
         animateValue('k_tn_dest', Math.round(k.tn_to_dest));
         animateValue('k_arrived', k.arrived);
         animateValue('k_tn_arrived', Math.round(k.tn_in));
         
-        // Dinero
+        // Financieros y Promedios (Strings pre-formateados en Python)
+        document.getElementById('k_avg_flete').innerText = k.avg_flete || "$ 0";
+        document.getElementById('k_avg_arena').innerText = k.avg_arena || "$ 0";
+
+        // Total
         const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(k.costo_total);
         document.getElementById('k_money').innerText = money;
     }
@@ -329,11 +354,10 @@
         }, 20);
     }
 
-    // --- RESTO DE FUNCIONES VISUALES ---
+    // --- RESTO DE FUNCIONES VISUALES (SIN CAMBIOS) ---
     function renderPayments(list) {
         const container = document.getElementById('pay-container');
         container.innerHTML = '';
-        
         const getMonthName = (m) => ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][parseInt(m)-1] || m;
 
         if (!list || list.length === 0) { 
