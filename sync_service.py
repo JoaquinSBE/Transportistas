@@ -135,10 +135,10 @@ def run_sbe_sync(db, Shipment):
     if raw_df.empty: return (0, "No hay datos 'Ingreso' válidos.")
 
     # 3. DEDUPLICACIÓN
-    if 'Factura' in raw_df.columns:
-        raw_df['Factura'] = raw_df['Factura'].astype(str)
-        raw_df['__temp_factura'] = raw_df['Factura'].str.strip()
-        raw_df = raw_df.drop_duplicates(subset=['__temp_factura'], keep='last')
+    #if 'Factura' in raw_df.columns:
+    #   raw_df['Factura'] = raw_df['Factura'].astype(str)
+    #   raw_df['__temp_factura'] = raw_df['Factura'].str.strip()
+    #   raw_df = raw_df.drop_duplicates(subset=['__temp_factura'], keep='last')
 
     # 4. NORMALIZACIÓN
     raw_df['Key_Remito']  = raw_df['Factura'].apply(normalize_remito)
