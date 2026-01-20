@@ -99,7 +99,7 @@ def download_and_concat(links, token, label="", sheet_name="Reporte"):
 # --- FUNCIÓN PRINCIPAL ---
 
 def run_sbe_sync(db, Shipment):
-    print("--- 🔍 INICIO SYNC SBE (V17: SOLO REMITO - CERO PATENTE) ---")
+    print("--- 🔍 INICIO SYNC SBE (V18: DEDUPLICACION INTELIGENTE) ---")
     
     try:
         res = db.session.execute(text("SELECT tolerance_kg FROM system_config LIMIT 1")).fetchone()
@@ -134,11 +134,23 @@ def run_sbe_sync(db, Shipment):
     
     if raw_df.empty: return (0, "No hay datos 'Ingreso' válidos.")
 
-    # 3. DEDUPLICACIÓN
-    #if 'Factura' in raw_df.columns:
-    #   raw_df['Factura'] = raw_df['Factura'].astype(str)
-    #   raw_df['__temp_factura'] = raw_df['Factura'].str.strip()
-    #   raw_df = raw_df.drop_duplicates(subset=['__temp_factura'], keep='last')
+    # -----------------------------------------------------------------------
+    # 3. DEDUPLICACIÓN INTELIGENTE (CORREGIDO)
+    # -----------------------------------------------------------------------
+    # Borramos solo si TODA la fila esencial es idéntica (error de sistema).
+    # Si cambia el peso o la hora exacta, se considera pesaje parcial y se suma luego.
+    
+    subset_cols = ['Factura', 'Patente Tractor', 'Peso Neto', 'Fecha Salida']
+    real_subset = [c for c in subset_cols if c in raw_df.columns]
+    
+    if real_subset:
+        initial_len = len(raw_df)
+        raw_df = raw_df.drop_duplicates(subset=real_subset, keep='first')
+        deleted = initial_len - len(raw_df)
+        if deleted > 0:
+            print(f"⚠️ Se eliminaron {deleted} registros duplicados idénticos (error sistema).")
+
+    # -----------------------------------------------------------------------
 
     # 4. NORMALIZACIÓN
     raw_df['Key_Remito']  = raw_df['Factura'].apply(normalize_remito)
@@ -155,9 +167,9 @@ def run_sbe_sync(db, Shipment):
 
     raw_df = raw_df.dropna(subset=['Key_Fecha'])
 
-    # 5. AGRUPAR
+    # 5. AGRUPAR (Aquí se suman los pesajes parciales)
     agg_rules = {
-        'Peso Neto': 'sum',
+        'Peso Neto': 'sum',          # <--- SUMA
         'Factura': 'first',          
         'Patente Tractor': 'first',
         'Patente Camión': 'first',
@@ -242,11 +254,6 @@ def run_sbe_sync(db, Shipment):
                 if found.iloc[0]['diff'] <= 5:
                     match_row = found.iloc[0]; match_type = "Remito"
 
-        # ------------------------------------------------------------------
-        # SE ELIMINÓ EL NIVEL 3 (SOLO PATENTE)
-        # Si no coincidió el remito, no se cruza. Punto.
-        # ------------------------------------------------------------------
-
         if match_row is not None:
             matches += 1
             used_indices.add(match_row.name)
@@ -290,7 +297,7 @@ def run_sbe_sync(db, Shipment):
             if match_type == "Remito": 
                 reasons.append("Revisar Patente (Coincide Remito)")
             
-            # Doble check de Tractor (Por si matcheó remito pero con otro camión)
+            # Doble check de Tractor
             if ship_trac and p_sbe_t:
                 if ship_trac != p_sbe_t:
                     if "Revisar Patente" not in str(reasons):
