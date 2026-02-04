@@ -286,9 +286,10 @@
           body: JSON.stringify({
             range: rangeSelect.value,
             arenera_id: document.getElementById('arenera_id').value,
-            start: document.getElementById('start_date').value,
-            end: document.getElementById('end_date').value
+            from: document.getElementById('start_date').value,
+            to: document.getElementById('end_date').value
           })
+
         });
         
         if(!res.ok) throw new Error('Error en servidor');
