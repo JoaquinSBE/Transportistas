@@ -283,12 +283,16 @@
               'Content-Type': 'application/json',
               'X-CSRFToken': csrfToken
           }, 
-          body: JSON.stringify({
-            range: rangeSelect.value,
-            arenera_id: document.getElementById('arenera_id').value,
-            from: document.getElementById('start_date').value,
-            to: document.getElementById('end_date').value
-          })
+          body: JSON.stringify(Object.assign(
+            {
+              range: rangeSelect.value,
+              arenera_id: document.getElementById('arenera_id').value
+            },
+            (rangeSelect.value === 'custom')
+              ? { from: document.getElementById('start_date').value, to: document.getElementById('end_date').value }
+              : {}
+          ))
+
 
         });
         
