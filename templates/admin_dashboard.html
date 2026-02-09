@@ -260,8 +260,18 @@
     const rangeSelect = document.getElementById('range');
     const customDates = document.getElementById('custom-dates');
     rangeSelect.addEventListener('change', () => {
-      customDates.style.display = (rangeSelect.value === 'custom') ? 'block' : 'none';
+      const isCustom = (rangeSelect.value === 'custom');
+      customDates.style.display = isCustom ? 'block' : 'none';
+
+      document.getElementById('start_date').disabled = !isCustom;
+      document.getElementById('end_date').disabled = !isCustom;
+
+      if (!isCustom) {
+        document.getElementById('start_date').value = '';
+        document.getElementById('end_date').value = '';
+      }
     });
+
     
     const todayISO = new Date().toISOString().split('T')[0];
     document.getElementById('start_date').value = todayISO;

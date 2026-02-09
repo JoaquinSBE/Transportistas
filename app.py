@@ -119,7 +119,9 @@ def _resolve_range(data: dict):
     rng = (data.get('range') or '').strip().lower()
     dfrom = data.get('from')
     dto   = data.get('to')
-    if dfrom and dto:
+
+    # Solo respetar from/to cuando el usuario eligio "custom"
+    if rng == 'custom' and dfrom and dto:
         try:
             start = date.fromisoformat(dfrom)
             end   = date.fromisoformat(dto)
@@ -128,6 +130,7 @@ def _resolve_range(data: dict):
             return start, end
         except Exception:
             pass
+
     hoy = get_arg_today()
     if rng in ('', 'today'):
         return hoy, hoy
