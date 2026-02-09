@@ -443,15 +443,45 @@
     }
 
     function renderAreneras(list) {
-      const c = document.getElementById('arenera-list'); c.innerHTML = '';
-      if (!list.length) { c.innerHTML = '<div class="text-center text-muted py-4">Sin datos</div>'; return; }
-      const max = Math.max(...list.map(i => i.value));
+      const c = document.getElementById('arenera-list');
+      c.innerHTML = '';
+
+      if (!list || !list.length) {
+        c.innerHTML = '<div class="text-center text-muted py-4">Sin datos</div>';
+        return;
+      }
+
+      const max = Math.max(...list.map(i => i.value || 0));
+      const total = list.reduce((acc, i) => acc + (i.value || 0), 0);
+
       list.forEach(i => {
-        const pct = (i.value / max) * 100;
+        const val = i.value || 0;
+        const pct = max > 0 ? (val / max) * 100 : 0;
+
         c.insertAdjacentHTML('beforeend', `
-          <div class="mb-3"><div class="d-flex justify-content-between small mb-1"><span class="fw-bold text-dark">${i.name}</span><span class="fw-bold text-primary">${i.value.toFixed(1)} Tn</span></div><div class="progress" style="height:6px;"><div class="progress-bar bg-primary" style="width:${pct}%"></div></div></div>`);
+          <div class="mb-3">
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="fw-bold text-dark">${i.name}</span>
+              <span class="fw-bold text-primary">${val.toFixed(1)} Tn</span>
+            </div>
+            <div class="progress" style="height:6px;">
+              <div class="progress-bar bg-primary" style="width:${pct}%"></div>
+            </div>
+          </div>
+        `);
       });
+
+      // --- TOTAL GENERAL (abajo) ---
+      c.insertAdjacentHTML('beforeend', `
+        <div class="mt-3 pt-3 border-top">
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="fw-bold text-dark">Total</span>
+            <span class="fw-bold text-dark">${total.toFixed(1)} Tn</span>
+          </div>
+        </div>
+      `);
     }
+
 
     function renderTransChart(data) {
       const ctx = document.getElementById('transChart').getContext('2d');
