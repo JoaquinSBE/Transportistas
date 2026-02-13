@@ -93,6 +93,7 @@ WA_GRAPH_VERSION = (os.getenv("WA_GRAPH_VERSION") or "v22.0").strip()
 WA_LINK_TTL_MINUTES = _env_int("WA_LINK_TTL_MINUTES", 20)
 WA_NOTIFY_CALLED_ENABLED = _env_bool("WA_NOTIFY_CALLED_ENABLED", False)
 WA_NOTIFY_TWO_AHEAD_ENABLED = _env_bool("WA_NOTIFY_TWO_AHEAD_ENABLED", False)
+INIT_DB_ON_BOOT = _env_bool("INIT_DB_ON_BOOT", True)
 
 PLANTS = {
     "SBE1": {"code": "SBE1", "name": "SBE1", "lat": SBE1_LAT, "lon": SBE1_LON},
@@ -527,49 +528,84 @@ class Tariff(db.Model):
 # Bootstrapping DB
 # ----------------------------
 with app.app_context():
-    if DB_SCHEMA and DB_SCHEMA != "public":
+    if not INIT_DB_ON_BOOT:
+        app.logger.info("INIT_DB_ON_BOOT=0 -> se omite bootstrap de esquema.")
+    else:
+        lock_id = 86420911
+        lock_acquired = False
+
         try:
-            db.session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}"))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+            if DB_SCHEMA and DB_SCHEMA != "public":
+                try:
+                    db.session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}"))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
 
-    try:
-        db.create_all()
-    except Exception as ex:
-        db.session.rollback()
-        app.logger.warning(f"db.create_all fallo en primer intento: {ex}")
-        time.sleep(0.6)
-        db.create_all()
+            try:
+                lock_acquired = bool(
+                    db.session.execute(
+                        text("SELECT pg_try_advisory_lock(:lock_id)"),
+                        {"lock_id": lock_id},
+                    ).scalar()
+                )
+            except Exception:
+                db.session.rollback()
+                lock_acquired = False
 
-    try:
-        db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(512)'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
+            if not lock_acquired:
+                app.logger.warning("No se pudo adquirir lock de bootstrap DB; se omite init para este worker.")
+            else:
+                try:
+                    db.create_all()
+                except Exception as ex:
+                    db.session.rollback()
+                    app.logger.warning(f"db.create_all fallo en primer intento: {ex}")
+                    try:
+                        time.sleep(0.6)
+                        db.create_all()
+                    except Exception as ex2:
+                        db.session.rollback()
+                        app.logger.error(f"db.create_all fallo en segundo intento: {ex2}")
 
-    try:
-        db.session.execute(text("ALTER TABLE system_config ADD COLUMN IF NOT EXISTS arrival_ttl_minutes integer DEFAULT 15"))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
+                try:
+                    db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(512)'))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
 
-    try:
-        db.session.execute(text("ALTER TABLE whatsapp_contact ADD COLUMN IF NOT EXISTS last_called_alert_arrival_id integer"))
-        db.session.execute(text("ALTER TABLE whatsapp_contact ADD COLUMN IF NOT EXISTS last_two_ahead_alert_arrival_id integer"))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
+                try:
+                    db.session.execute(text("ALTER TABLE system_config ADD COLUMN IF NOT EXISTS arrival_ttl_minutes integer DEFAULT 15"))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
 
-    admin = db.session.query(User).filter(func.lower(User.username) == norm_username(ADMIN_USER)).first()
-    if not admin:
-        admin = User(
-            username=norm_username(ADMIN_USER),
-            password_hash=generate_password_hash(ADMIN_PASS),
-            tipo="admin",
-        )
-        db.session.add(admin)
-        db.session.commit()
+                try:
+                    db.session.execute(text("ALTER TABLE whatsapp_contact ADD COLUMN IF NOT EXISTS last_called_alert_arrival_id integer"))
+                    db.session.execute(text("ALTER TABLE whatsapp_contact ADD COLUMN IF NOT EXISTS last_two_ahead_alert_arrival_id integer"))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
+                try:
+                    admin = db.session.query(User).filter(func.lower(User.username) == norm_username(ADMIN_USER)).first()
+                    if not admin:
+                        admin = User(
+                            username=norm_username(ADMIN_USER),
+                            password_hash=generate_password_hash(ADMIN_PASS),
+                            tipo="admin",
+                        )
+                        db.session.add(admin)
+                        db.session.commit()
+                except Exception:
+                    db.session.rollback()
+        finally:
+            if lock_acquired:
+                try:
+                    db.session.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id})
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
 
 # ----------------------------
 # Decoradores de auth
@@ -599,6 +635,10 @@ def role_required(*roles):
 @app.route("/")
 def login_page():
     return render_template(tpl("login"))
+
+@app.get("/healthz")
+def healthz():
+    return jsonify({"ok": True}), 200
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -4502,15 +4542,18 @@ def enviar_alertas_viernes():
 # --- INICIALIZACIÓN DEL SCHEDULER ---
 
 if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-    scheduler = BackgroundScheduler()
-    # Programar para todos los viernes (day_of_week='fri') a las 09:00 AM
-    scheduler.add_job(func=enviar_alertas_viernes, trigger="cron", day_of_week='fri', hour=9)
-    if WA_NOTIFY_TWO_AHEAD_ENABLED:
-        scheduler.add_job(func=_wa_notify_two_ahead, trigger="interval", minutes=1)
-    scheduler.start()
-    
-    # Asegurar que se apague correctamente al cerrar la app
-    atexit.register(lambda: scheduler.shutdown())
+    try:
+        scheduler = BackgroundScheduler()
+        # Programar para todos los viernes (day_of_week='fri') a las 09:00 AM
+        scheduler.add_job(func=enviar_alertas_viernes, trigger="cron", day_of_week='fri', hour=9)
+        if WA_NOTIFY_TWO_AHEAD_ENABLED:
+            scheduler.add_job(func=_wa_notify_two_ahead, trigger="interval", minutes=1)
+        scheduler.start()
+        
+        # Asegurar que se apague correctamente al cerrar la app
+        atexit.register(lambda: scheduler.shutdown())
+    except Exception as ex:
+        app.logger.error(f"No se pudo iniciar scheduler: {ex}")
     
 if __name__ == "__main__":
     app.run(host=os.getenv("FLASK_HOST", "0.0.0.0"),
