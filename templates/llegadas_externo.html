@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Llegadas Externas | SBE</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --bs-font-sans-serif: "Inter", sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --card-radius: 12px;
+    }
+
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      min-height: 100vh;
+    }
+
+    .navbar-glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .card-custom {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      overflow: hidden;
+    }
+
+    .card-header-custom {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #f3f4f6;
+      background-color: #fff;
+    }
+
+    .card-body {
+      padding: 1.1rem 1.25rem 1.25rem 1.25rem;
+    }
+
+    .form-control, .form-select {
+      border-radius: 8px;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid #d1d5db;
+      font-size: 0.9rem;
+    }
+
+    .form-control:focus, .form-select:focus {
+      border-color: var(--bs-primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .loading-indicator {
+      display: inline-block;
+      width: 0.95rem;
+      height: 0.95rem;
+      border: 2px solid #bfdbfe;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      vertical-align: -2px;
+      margin-right: 0.4rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-glass mb-4">
+    <div class="container">
+      <span class="navbar-brand mb-0 h1 fw-bold text-dark">
+        <i class="fa-solid fa-truck text-primary me-2"></i>Ingreso Externo
+      </span>
+    </div>
+  </nav>
+
+  <main class="container pb-4">
+    <div class="row justify-content-center">
+      <div class="col-lg-7 col-md-9">
+        {% if wa_notice %}
+        <div class="alert alert-warning">{{ wa_notice }}</div>
+        {% endif %}
+
+        <div class="card-custom">
+          <div class="card-header-custom">
+            <h1 class="h5 mb-1">Registro externo con geolocalizacion</h1>
+            <p class="text-muted mb-0 small">Completa los datos del camion. Debe estar dentro del radio habilitado.</p>
+          </div>
+          <div class="card-body p-4">
+            <form id="external-form" class="row g-3" novalidate>
+              <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" id="wa_token" value="{{ (prefill.wa_token if prefill else '') }}">
+
+              <div class="col-md-6">
+                <label for="dni" class="form-label fw-medium">DNI</label>
+                <input type="text" id="dni" class="form-control" value="{{ (prefill.dni if prefill else '') }}" placeholder="Ej: 32123456" inputmode="numeric" required>
+              </div>
+              <div class="col-md-6">
+                <label for="plant" class="form-label fw-medium">Planta</label>
+                <select id="plant" class="form-select" required>
+                  <option value="" {{ '' if (prefill and prefill.plant) else 'selected' }} disabled>Seleccionar planta</option>
+                  {% for code, p in plants.items() %}
+                  <option value="{{ code }}" {{ 'selected' if (prefill and prefill.plant == code) else '' }}>{{ p.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="col-md-6">
+                <label for="nombre" class="form-label fw-medium">Nombre</label>
+                <input type="text" id="nombre" class="form-control" maxlength="120" required>
+              </div>
+              <div class="col-md-6">
+                <label for="apellido" class="form-label fw-medium">Apellido</label>
+                <input type="text" id="apellido" class="form-control" maxlength="120" required>
+              </div>
+              <div class="col-md-6">
+                <label for="empresa" class="form-label fw-medium">Empresa</label>
+                <input type="text" id="empresa" class="form-control" maxlength="120" required>
+              </div>
+              <div class="col-md-6">
+                <label for="patente" class="form-label fw-medium">Patente</label>
+                <input type="text" id="patente" class="form-control text-uppercase" maxlength="30" required>
+              </div>
+
+              <div class="col-12">
+                <button type="submit" class="btn btn-primary w-100" id="btn-submit">
+                  <i class="fa-solid fa-location-dot me-1"></i>Enviar con ubicacion
+                </button>
+              </div>
+            </form>
+
+            <div id="result" class="mt-3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const form = document.getElementById("external-form");
+      const result = document.getElementById("result");
+      const btn = document.getElementById("btn-submit");
+
+      function showMessage(message, type) {
+        result.className = `alert alert-${type} mb-0`;
+        result.innerHTML = message;
+      }
+
+      function showError(message) {
+        showMessage(message, "danger");
+      }
+
+      form.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+
+        const payload = {
+          dni: (document.getElementById("dni").value || "").trim(),
+          plant: (document.getElementById("plant").value || "").trim(),
+          nombre: (document.getElementById("nombre").value || "").trim(),
+          apellido: (document.getElementById("apellido").value || "").trim(),
+          empresa: (document.getElementById("empresa").value || "").trim(),
+          patente: (document.getElementById("patente").value || "").trim().toUpperCase(),
+          wa_token: (document.getElementById("wa_token").value || "").trim()
+        };
+        const csrfToken = document.getElementById("csrf_token").value;
+
+        if (!payload.dni || !payload.plant || !payload.nombre || !payload.apellido || !payload.empresa || !payload.patente) {
+          showError("Completa todos los campos obligatorios.");
+          return;
+        }
+        if (!navigator.geolocation) {
+          showError("Este navegador no permite geolocalizacion.");
+          return;
+        }
+
+        btn.disabled = true;
+        showMessage('<span class="loading-indicator"></span>Obteniendo ubicacion...', "info");
+
+        navigator.geolocation.getCurrentPosition(async function (pos) {
+          payload.lat = pos.coords.latitude;
+          payload.lon = pos.coords.longitude;
+          payload.accuracy = pos.coords.accuracy;
+
+          try {
+            const resp = await fetch("/api/llegadas/external-checkin", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrfToken
+              },
+              credentials: "same-origin",
+              body: JSON.stringify(payload)
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.ok) {
+              showError(data.error || "No se pudo registrar la solicitud.");
+              return;
+            }
+            showMessage(
+              `Solicitud registrada.<br>ID: <strong>${data.request_id}</strong><br>Estado: <strong>${data.status}</strong>`,
+              "success"
+            );
+          } catch (err) {
+            showError("Error de red al registrar la solicitud.");
+          } finally {
+            btn.disabled = false;
+          }
+        }, function () {
+          btn.disabled = false;
+          showError("No se pudo obtener la ubicacion del dispositivo.");
+        }, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

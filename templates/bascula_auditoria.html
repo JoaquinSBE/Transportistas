@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="es" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bascula | Auditoria</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --bs-font-sans-serif: "Inter", sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --card-radius: 12px;
+    }
+
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      min-height: 100vh;
+    }
+
+    .navbar-glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .card-custom {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      overflow: hidden;
+    }
+
+    .card-header-custom {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #f3f4f6;
+      background-color: #fff;
+    }
+
+    .card-body {
+      padding: 1rem 1.25rem;
+    }
+
+    .table-custom th {
+      background-color: #f9fafb;
+      color: #6b7280;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e5e7eb;
+      white-space: nowrap;
+      padding: 0.7rem 0.75rem;
+    }
+
+    .table-custom td {
+      font-size: 0.85rem;
+      color: #374151;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+      padding: 0.75rem;
+    }
+
+    .table-custom tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .flag-pill {
+      border-radius: 999px;
+      padding: 0.28rem 0.55rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      margin-right: 0.3rem;
+      margin-bottom: 0.22rem;
+      display: inline-block;
+    }
+
+    .flag-before { background: #fef3c7; color: #92400e; }
+    .flag-expiry { background: #fee2e2; color: #991b1b; }
+    .flag-order  { background: #dbeafe; color: #1e3a8a; }
+    .flag-none   { background: #e5e7eb; color: #374151; }
+
+    .flag-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.2rem;
+      min-width: 180px;
+    }
+
+    .section-stat {
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      color: #374151;
+      padding: 0.2rem 0.55rem;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-glass mb-4">
+    <div class="container-fluid px-3 px-md-4">
+      <span class="navbar-brand fw-bold text-dark mb-0">
+        <i class="fa-solid fa-clipboard-list text-primary me-2"></i>Auditoria de Llegadas
+      </span>
+      <a href="{{ url_for('admin_panel') if session.get('tipo') == 'admin' else url_for('admin_dashboard') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="fa-solid fa-arrow-left me-1"></i>Volver
+      </a>
+    </div>
+  </nav>
+
+  <main class="container-fluid px-3 px-md-4 pb-4">
+    <div class="card-custom mb-3">
+      <div class="card-header-custom">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <div>
+            <h1 class="h6 mb-1">Filtros</h1>
+            <p class="text-muted small mb-0">Cruce entre timestamps del modulo y hora real de bascula.</p>
+          </div>
+          <span class="section-stat">{{ rows|length }} resultados</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <form method="GET" class="row g-3">
+          <div class="col-md-3 col-sm-6">
+            <label class="form-label form-label-sm fw-medium">Planta</label>
+            <select class="form-select form-select-sm" name="plant">
+              <option value="ALL" {{ 'selected' if plant == 'ALL' else '' }}>Todas</option>
+              {% for code, p in plants.items() %}
+              <option value="{{ code }}" {{ 'selected' if plant == code else '' }}>{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <label class="form-label form-label-sm fw-medium">Desde</label>
+            <input type="date" class="form-control form-control-sm" name="start" value="{{ start }}">
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <label class="form-label form-label-sm fw-medium">Hasta</label>
+            <input type="date" class="form-control form-control-sm" name="end" value="{{ end }}">
+          </div>
+          <div class="col-md-3 col-sm-6 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary btn-sm w-100">
+              <i class="fa-solid fa-filter me-1"></i>Filtrar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card-custom">
+      <div class="table-responsive">
+        <table class="table table-custom mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>Planta</th>
+              <th>DNI</th>
+              <th>Chofer</th>
+              <th>Registrado</th>
+              <th>Vence</th>
+              <th>Llamado</th>
+              <th>Inicio carga</th>
+              <th>Hora real bascula</th>
+              <th>Flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr>
+              <td class="fw-semibold">{{ r.arrival.plant }}</td>
+              <td>{{ r.arrival.dni }}</td>
+              <td>{{ r.arrival.chofer_nombre or '-' }}</td>
+              <td>{{ r.arrival.registered_at.strftime('%Y-%m-%d %H:%M:%S') if r.arrival.registered_at else '-' }}</td>
+              <td>{{ r.arrival.expires_at.strftime('%Y-%m-%d %H:%M:%S') if r.arrival.expires_at else '-' }}</td>
+              <td>{{ r.arrival.called_at.strftime('%Y-%m-%d %H:%M:%S') if r.arrival.called_at else '-' }}</td>
+              <td>{{ r.arrival.loading_started_at.strftime('%Y-%m-%d %H:%M:%S') if r.arrival.loading_started_at else '-' }}</td>
+              <td>{{ r.shipment.sbe_fecha_llegada.strftime('%Y-%m-%d %H:%M:%S') if r.shipment and r.shipment.sbe_fecha_llegada else '-' }}</td>
+              <td>
+                <div class="flag-wrap">
+                  {% if r.called_before_real_entry %}<span class="flag-pill flag-before">called_before_real_entry</span>{% endif %}
+                  {% if r.loading_after_expiry %}<span class="flag-pill flag-expiry">loading_after_expiry</span>{% endif %}
+                  {% if r.out_of_order %}<span class="flag-pill flag-order">out_of_order</span>{% endif %}
+                  {% if not r.called_before_real_entry and not r.loading_after_expiry and not r.out_of_order %}
+                  <span class="flag-pill flag-none">sin flags</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="9" class="text-center py-4 text-muted">Sin resultados para los filtros actuales.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

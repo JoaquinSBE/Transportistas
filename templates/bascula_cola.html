@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="es" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bascula | Cola</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --bs-font-sans-serif: "Inter", sans-serif;
+      --bs-primary: #2563eb;
+      --bs-body-bg: #f3f4f6;
+      --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --card-radius: 12px;
+    }
+
+    body {
+      font-family: var(--bs-font-sans-serif);
+      background-color: var(--bs-body-bg);
+      min-height: 100vh;
+    }
+
+    .navbar-glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .card-custom {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      overflow: hidden;
+    }
+
+    .card-header-custom {
+      background: transparent;
+      border-bottom: 1px solid #f3f4f6;
+      padding: 1rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .table-custom th {
+      background-color: #f9fafb;
+      color: #6b7280;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e5e7eb;
+      white-space: nowrap;
+      padding: 0.7rem 0.75rem;
+    }
+
+    .table-custom td {
+      font-size: 0.86rem;
+      color: #374151;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+      padding: 0.75rem;
+    }
+    .table-custom tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .status-pill {
+      border-radius: 999px;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .status-queued { background: #e5e7eb; color: #374151; }
+    .status-called { background: #dbeafe; color: #1e3a8a; }
+    .status-loading { background: #dcfce7; color: #166534; }
+
+    .plant-switch .btn {
+      min-width: 78px;
+      font-weight: 600;
+    }
+
+    .actions-wrap {
+      min-width: 320px;
+    }
+
+    .action-panel {
+      border: 1px solid #e5e7eb;
+      background: #fafafa;
+      border-radius: 10px;
+      padding: 0.6rem;
+    }
+
+    .section-stat {
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      color: #374151;
+      padding: 0.2rem 0.55rem;
+      font-weight: 600;
+    }
+
+    @media (max-width: 992px) {
+      .actions-wrap {
+        min-width: 280px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-glass mb-4">
+    <div class="container-fluid px-3 px-md-4">
+      <span class="navbar-brand fw-bold text-dark mb-0">
+        <i class="fa-solid fa-weight-scale text-primary me-2"></i>Bascula | Cola de Llegadas
+      </span>
+      <div class="plant-switch d-flex gap-2">
+        {% for code, p in plants.items() %}
+        <a href="{{ url_for('bascula_cola', plant=code) }}" class="btn btn-sm {{ 'btn-primary' if plant == code else 'btn-outline-primary' }}">
+          {{ p.name }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </nav>
+
+  <main class="container-fluid px-3 px-md-4 pb-4">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert {{ 'alert-success' if category in ['ok','success'] else 'alert-danger' if category in ['error','danger'] else 'alert-info' }} py-2 mb-3" role="alert">
+          {{ message }}
+        </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card-custom">
+      <div class="card-header-custom">
+        <div>
+          <h1 class="h6 mb-1">Turnos activos en {{ plant }}</h1>
+          <div class="text-muted small">Ordenados por fecha y hora de registro.</div>
+        </div>
+        <span class="section-stat">{{ arrivals|length }} en cola</span>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-custom mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>DNI</th>
+              <th>Chofer</th>
+              <th>Tractor / Trailer</th>
+              <th>Transportista</th>
+              <th>Arenera</th>
+              <th>Registrado</th>
+              <th>Vence (desde llamado)</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in arrivals %}
+            <tr>
+              <td class="fw-semibold">{{ a.dni }}</td>
+              <td>{{ a.chofer_nombre or '-' }}</td>
+              <td>{{ (a.tractor or '-') ~ ' / ' ~ (a.trailer or '-') }}</td>
+              <td>{{ a.shipment.transportista.username if a.shipment and a.shipment.transportista else '-' }}</td>
+              <td>{{ a.shipment.arenera.username if a.shipment and a.shipment.arenera else '-' }}</td>
+              <td>{{ a.registered_at.strftime('%Y-%m-%d %H:%M:%S') if a.registered_at else '-' }}</td>
+              <td>
+                {% if a.status == 'QUEUED' %}
+                <span class="text-muted">Se define al llamar</span>
+                {% else %}
+                {{ a.expires_at.strftime('%Y-%m-%d %H:%M:%S') if a.expires_at else '-' }}
+                {% endif %}
+              </td>
+              <td>
+                {% if a.status == 'QUEUED' %}
+                <span class="status-pill status-queued">QUEUED</span>
+                {% elif a.status == 'CALLED' %}
+                <span class="status-pill status-called">CALLED</span>
+                {% elif a.status == 'LOADING' %}
+                <span class="status-pill status-loading">LOADING</span>
+                {% else %}
+                <span class="status-pill status-queued">{{ a.status }}</span>
+                {% endif %}
+              </td>
+              <td class="actions-wrap">
+                <div class="action-panel">
+                  {% if a.status == 'QUEUED' %}
+                  <form method="POST" action="{{ url_for('bascula_call', arrival_id=a.id) }}" class="js-call-form" data-arrival-id="{{ a.id }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="plant" value="{{ plant }}">
+                    <input type="hidden" name="reason" value="">
+                    <button type="submit" class="btn btn-warning btn-sm w-100">
+                      <i class="fa-solid fa-bullhorn me-1"></i>Llamar
+                    </button>
+                  </form>
+                  <div class="text-muted small mt-2">Si se adelanta turno, se pedira observacion.</div>
+                  {% elif a.status == 'CALLED' %}
+                  <form method="POST" action="{{ url_for('bascula_arrived', arrival_id=a.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="plant" value="{{ plant }}">
+                    <button type="submit" class="btn btn-success btn-sm w-100">
+                      <i class="fa-solid fa-check me-1"></i>Llego
+                    </button>
+                  </form>
+                  {% else %}
+                  <span class="text-muted small">Sin acciones disponibles</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="9" class="text-center py-4 text-muted">
+                No hay registros activos para {{ plant }}.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const firstQueuedId = Number("{{ first_queued_id if first_queued_id else '' }}");
+      if (!Number.isInteger(firstQueuedId) || firstQueuedId <= 0) return;
+
+      const forms = document.querySelectorAll(".js-call-form");
+      forms.forEach(function (form) {
+        form.addEventListener("submit", function (ev) {
+          const arrivalId = Number(form.dataset.arrivalId || 0);
+          if (!Number.isInteger(arrivalId) || arrivalId <= 0 || arrivalId === firstQueuedId) {
+            return;
+          }
+          ev.preventDefault();
+          const reason = window.prompt("Agregar justificacion por el cual se adelanta este turno", "");
+          if (reason === null) return;
+          const reasonText = reason.trim();
+          if (!reasonText) {
+            alert("Debes ingresar una observacion para confirmar el adelanto.");
+            return;
+          }
+          const reasonInput = form.querySelector("input[name='reason']");
+          if (reasonInput) {
+            reasonInput.value = reasonText;
+          }
+          form.submit();
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

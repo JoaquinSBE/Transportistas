@@ -2,13 +2,16 @@
 import base64
 import requests
 import os
+import json
+import math
 import io, csv
 from datetime import datetime, date, timedelta
 from functools import wraps
 from sqlalchemy import func, case, text, cast, Date, or_
-from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, make_response
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, make_response, jsonify, has_request_context
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from openpyxl import Workbook
 import sync_service
 import threading
@@ -19,6 +22,7 @@ from flask_wtf.csrf import CSRFProtect
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 import re
+from urllib.parse import urlencode
 
 # ----------------------------
 # CONFIGURACIÓN ZONA HORARIA
@@ -49,6 +53,64 @@ PASSWORD_LOG = os.getenv("PASSWORD_LOG", os.path.join("Data", "passwords.log"))
 ADMIN_USER   = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASS   = os.getenv("ADMIN_PASS", "admin123")
 DB_SCHEMA    = os.getenv("DB_SCHEMA", "transportistas")
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "y", "on"}
+
+def _env_int(name: str, default: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+def _env_float(name: str, default: float | None = None) -> float | None:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+SBE_GEO_RADIUS_M = _env_float("SBE_GEO_RADIUS_M", 500.0) or 500.0
+SBE1_LAT = _env_float("SBE1_LAT", -34.0)
+SBE1_LON = _env_float("SBE1_LON", -58.0)
+SBE2_LAT = _env_float("SBE2_LAT", -34.0)
+SBE2_LON = _env_float("SBE2_LON", -58.0)
+PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+
+WA_ENABLED = _env_bool("WA_ENABLED", False)
+WA_VERIFY_TOKEN = (os.getenv("WA_VERIFY_TOKEN") or "").strip()
+WA_ACCESS_TOKEN = (os.getenv("WA_ACCESS_TOKEN") or "").strip()
+WA_PHONE_NUMBER_ID = (os.getenv("WA_PHONE_NUMBER_ID") or "").strip()
+WA_GRAPH_VERSION = (os.getenv("WA_GRAPH_VERSION") or "v22.0").strip()
+WA_LINK_TTL_MINUTES = _env_int("WA_LINK_TTL_MINUTES", 20)
+WA_NOTIFY_CALLED_ENABLED = _env_bool("WA_NOTIFY_CALLED_ENABLED", False)
+WA_NOTIFY_TWO_AHEAD_ENABLED = _env_bool("WA_NOTIFY_TWO_AHEAD_ENABLED", False)
+
+PLANTS = {
+    "SBE1": {"code": "SBE1", "name": "SBE1", "lat": SBE1_LAT, "lon": SBE1_LON},
+    "SBE2": {"code": "SBE2", "name": "SBE2", "lat": SBE2_LAT, "lon": SBE2_LON},
+}
+
+def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = (math.sin(d_phi / 2) ** 2) + math.cos(phi1) * math.cos(phi2) * (math.sin(d_lambda / 2) ** 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return r * c
+
+def now_local():
+    return datetime.now(ARG_TZ).replace(tzinfo=None)
 
 # Solo PostgreSQL (sin fallback)
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
@@ -163,6 +225,22 @@ def get_family_ids(user_id):
 
 def norm_username(s: str) -> str:
     return (s or "").strip().lower()
+
+def normalize_dni(dni: str) -> str:
+    return ''.join(ch for ch in (dni or '') if ch.isdigit())
+
+def find_active_shipment_by_dni(dni_raw: str):
+    dni_clean = (dni_raw or "").strip()
+    dni_n = normalize_dni(dni_clean)
+    if not dni_n:
+        return None
+    q = Shipment.query.filter(
+        Shipment.cert_status != "Certificado",
+        Shipment.sbe_fecha_salida == None,
+        Shipment.date >= (get_arg_today() - timedelta(days=7)),
+        or_(Shipment.dni == dni_clean, Shipment.dni == dni_n)
+    ).order_by(Shipment.date.desc(), Shipment.id.desc())
+    return q.first()
 
 def calcular_cuil(dni_str: str, gender: str | None) -> str:
     digits = ''.join(ch for ch in (dni_str or '') if ch.isdigit()).zfill(8)
@@ -309,6 +387,93 @@ class Shipment(db.Model):
     frozen_flete_neto  = db.Column(db.Float, default=0.0)
     frozen_flete_iva   = db.Column(db.Float, default=0.0)
 
+class ArrivalCheckin(db.Model):
+    __tablename__ = "arrival_checkin"
+    id = db.Column(db.Integer, primary_key=True)
+
+    plant = db.Column(db.String(10), nullable=False, index=True)
+    dni = db.Column(db.String(50), nullable=False, index=True)
+
+    shipment_id = db.Column(db.Integer, db.ForeignKey("shipment.id"), nullable=False, index=True)
+    shipment = db.relationship("Shipment")
+
+    chofer_nombre = db.Column(db.String(100), nullable=True)
+    tractor = db.Column(db.String(20), nullable=True)
+    trailer = db.Column(db.String(20), nullable=True)
+    transportista_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    arenera_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+
+    registered_at = db.Column(db.DateTime, nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+
+    called_at = db.Column(db.DateTime, nullable=True, index=True)
+    called_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    called_reason = db.Column(db.Text, nullable=True)
+
+    loading_started_at = db.Column(db.DateTime, nullable=True, index=True)
+    loading_started_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+
+    status = db.Column(db.String(20), nullable=False, default="QUEUED", index=True)
+    distance_m = db.Column(db.Float, nullable=True)
+    accuracy_m = db.Column(db.Float, nullable=True)
+
+class ArrivalEvent(db.Model):
+    __tablename__ = "arrival_event"
+    id = db.Column(db.Integer, primary_key=True)
+    arrival_id = db.Column(db.Integer, db.ForeignKey("arrival_checkin.id"), nullable=False, index=True)
+    arrival = db.relationship("ArrivalCheckin", backref=db.backref("events", lazy="dynamic"))
+
+    event_type = db.Column(db.String(30), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    metadata_json = db.Column(db.Text, nullable=True)
+
+class WhatsAppContact(db.Model):
+    __tablename__ = "whatsapp_contact"
+    id = db.Column(db.Integer, primary_key=True)
+    phone_e164 = db.Column(db.String(32), unique=True, nullable=False, index=True)
+    dni = db.Column(db.String(50), nullable=True, index=True)
+    plant = db.Column(db.String(10), nullable=True, index=True)
+    state = db.Column(db.String(30), nullable=False, default="ASK_DNI", index=True)
+    last_arrival_id = db.Column(db.Integer, db.ForeignKey("arrival_checkin.id"), nullable=True, index=True)
+    last_called_alert_arrival_id = db.Column(db.Integer, nullable=True, index=True)
+    last_two_ahead_alert_arrival_id = db.Column(db.Integer, nullable=True, index=True)
+    last_inbound_at = db.Column(db.DateTime, nullable=True, index=True)
+    last_outbound_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_local, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_local, index=True)
+
+class WhatsAppMessageLog(db.Model):
+    __tablename__ = "whatsapp_message_log"
+    id = db.Column(db.Integer, primary_key=True)
+    contact_id = db.Column(db.Integer, db.ForeignKey("whatsapp_contact.id"), nullable=True, index=True)
+    phone_e164 = db.Column(db.String(32), nullable=False, index=True)
+    wa_message_id = db.Column(db.String(255), nullable=True, index=True)
+    direction = db.Column(db.String(10), nullable=False, index=True)  # IN/OUT
+    body_text = db.Column(db.Text, nullable=True)
+    payload_json = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(30), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_local, index=True)
+
+class ArrivalExternalRequest(db.Model):
+    __tablename__ = "arrival_external_request"
+    id = db.Column(db.Integer, primary_key=True)
+    phone_e164 = db.Column(db.String(32), nullable=True, index=True)
+    dni = db.Column(db.String(50), nullable=False, index=True)
+    plant = db.Column(db.String(10), nullable=False, index=True)
+    nombre = db.Column(db.String(120), nullable=False)
+    apellido = db.Column(db.String(120), nullable=False)
+    empresa = db.Column(db.String(120), nullable=False)
+    patente = db.Column(db.String(30), nullable=False)
+    lat = db.Column(db.Float, nullable=True)
+    lon = db.Column(db.Float, nullable=True)
+    accuracy_m = db.Column(db.Float, nullable=True)
+    distance_m = db.Column(db.Float, nullable=True)
+    source = db.Column(db.String(30), nullable=False, default="web")
+    status = db.Column(db.String(30), nullable=False, default="PENDING", index=True)
+    registered_at = db.Column(db.DateTime, nullable=False, default=now_local, index=True)
+    metadata_json = db.Column(db.Text, nullable=True)
+
 class Quota(db.Model):
     __tablename__ = "quota"
     id               = db.Column(db.Integer, primary_key=True)
@@ -345,6 +510,7 @@ class SystemConfig(db.Model):
     sand_price     = db.Column(db.Float, default=0.0)
     transport_price= db.Column(db.Float, default=0.0)
     admin_email    = db.Column(db.String(120), nullable=True)
+    arrival_ttl_minutes = db.Column(db.Integer, default=15)
 
 class Tariff(db.Model):
     __tablename__ = "tariff"
@@ -368,10 +534,29 @@ with app.app_context():
         except Exception:
             db.session.rollback()
 
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as ex:
+        db.session.rollback()
+        app.logger.warning(f"db.create_all fallo en primer intento: {ex}")
+        time.sleep(0.6)
+        db.create_all()
 
     try:
         db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(512)'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(text("ALTER TABLE system_config ADD COLUMN IF NOT EXISTS arrival_ttl_minutes integer DEFAULT 15"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(text("ALTER TABLE whatsapp_contact ADD COLUMN IF NOT EXISTS last_called_alert_arrival_id integer"))
+        db.session.execute(text("ALTER TABLE whatsapp_contact ADD COLUMN IF NOT EXISTS last_two_ahead_alert_arrival_id integer"))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -436,6 +621,8 @@ def login():
             return redirect(url_for("transportista_panel"))
         if user.tipo == "arenera":
             return redirect(url_for("arenera_panel"))
+        if user.tipo == "basculista":
+            return redirect(url_for("bascula_cola"))
             
     flash("Usuario o clave incorrectos", "error")
     return redirect(url_for("login_page"))
@@ -459,6 +646,1043 @@ def change_password():
             return redirect(url_for(f"{user.tipo}_panel"))
         flash("Contraseña actual no coincide", "error")
     return render_template(tpl("change_password"), user=user)
+
+@app.get("/basculista")
+@login_required
+@role_required("basculista")
+def basculista_panel():
+    return redirect(url_for("bascula_cola"))
+
+ACTIVE_ARRIVAL_STATUSES = ("QUEUED", "CALLED", "LOADING")
+WA_CONV_STATES = (
+    "ASK_DNI",
+    "ASK_PLANT",
+    "READY",
+    "EXTERNAL_FORM",
+    "EXTERNAL_PENDING",
+)
+
+def _coerce_float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+def _queue_position(arrival: ArrivalCheckin):
+    if not arrival:
+        return None
+    return _ahead_count(arrival) + 1
+
+def _ahead_count(arrival: ArrivalCheckin):
+    if not arrival:
+        return None
+    return (
+        ArrivalCheckin.query
+        .filter(
+            ArrivalCheckin.plant == arrival.plant,
+            ArrivalCheckin.status == "QUEUED",
+            ArrivalCheckin.registered_at < arrival.registered_at,
+        )
+        .count()
+    )
+
+def _create_arrival_event(arrival_id: int, event_type: str, user_id=None, created_at=None, metadata=None):
+    metadata_json = None
+    if metadata is not None:
+        metadata_json = json.dumps(metadata, ensure_ascii=False)
+    ev = ArrivalEvent(
+        arrival_id=arrival_id,
+        event_type=event_type,
+        created_at=created_at or now_local(),
+        user_id=user_id,
+        metadata_json=metadata_json,
+    )
+    db.session.add(ev)
+
+def _parse_event_metadata(raw_text: str):
+    if not raw_text:
+        return {}
+    try:
+        data = json.loads(raw_text)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def _normalize_phone_e164(phone_raw: str) -> str:
+    digits = "".join(ch for ch in (phone_raw or "") if ch.isdigit())
+    return digits
+
+def _safe_json_dump(value) -> str | None:
+    if value is None:
+        return None
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except Exception:
+        return str(value)
+
+def _wa_serializer():
+    return URLSafeTimedSerializer(app.secret_key, salt="wa-geo-link")
+
+def _issue_wa_link_token(phone_e164: str, dni: str, plant: str | None, mode: str) -> str:
+    payload = {
+        "p": _normalize_phone_e164(phone_e164),
+        "d": normalize_dni(dni),
+        "pl": (plant or "").upper(),
+        "m": (mode or "known").strip().lower(),
+        "ts": int(time.time()),
+    }
+    return _wa_serializer().dumps(payload)
+
+def _parse_wa_link_token(token: str):
+    token = (token or "").strip()
+    if not token:
+        return None, "missing"
+    try:
+        max_age = max(60, WA_LINK_TTL_MINUTES * 60)
+        data = _wa_serializer().loads(token, max_age=max_age)
+        if not isinstance(data, dict):
+            return None, "invalid"
+        return data, None
+    except SignatureExpired:
+        return None, "expired"
+    except BadSignature:
+        return None, "invalid"
+    except Exception:
+        return None, "invalid"
+
+def _build_public_url(path: str, query: dict | None = None):
+    path = path if str(path).startswith("/") else f"/{path}"
+    query = query or {}
+    query_str = urlencode({k: v for k, v in query.items() if v is not None and v != ""})
+    base = PUBLIC_BASE_URL
+    if not base and has_request_context():
+        base = request.url_root.rstrip("/")
+    if base:
+        return f"{base}{path}" + (f"?{query_str}" if query_str else "")
+    return path + (f"?{query_str}" if query_str else "")
+
+def _wa_log_message(direction: str, phone_e164: str, body_text: str | None, payload=None, contact_id=None, wa_message_id=None, status=None):
+    log = WhatsAppMessageLog(
+        direction=(direction or "IN").upper(),
+        phone_e164=_normalize_phone_e164(phone_e164),
+        contact_id=contact_id,
+        wa_message_id=wa_message_id,
+        body_text=body_text,
+        payload_json=_safe_json_dump(payload),
+        status=status,
+        created_at=now_local(),
+    )
+    db.session.add(log)
+
+def _wa_get_or_create_contact(phone_e164: str):
+    phone = _normalize_phone_e164(phone_e164)
+    if not phone:
+        return None
+    now = now_local()
+    contact = WhatsAppContact.query.filter_by(phone_e164=phone).first()
+    if not contact:
+        contact = WhatsAppContact(
+            phone_e164=phone,
+            state="ASK_DNI",
+            created_at=now,
+            updated_at=now,
+        )
+        db.session.add(contact)
+        db.session.flush()
+    return contact
+
+def _parse_plant_text(text: str):
+    upper = (text or "").strip().upper()
+    raw = upper.replace(" ", "")
+    tokens = [tok for tok in re.split(r"[^A-Z0-9]+", upper) if tok]
+    if raw in {"SBE1", "1", "PLANTA1"} or "SBE1" in tokens or "PLANTA1" in tokens:
+        return "SBE1"
+    if raw in {"SBE2", "2", "PLANTA2"} or "SBE2" in tokens or "PLANTA2" in tokens:
+        return "SBE2"
+    return None
+
+def _wa_send_text(phone_e164: str, text_message: str, contact: WhatsAppContact | None = None):
+    phone = _normalize_phone_e164(phone_e164)
+    body = (text_message or "").strip()
+    if not phone or not body:
+        return False
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": phone,
+        "type": "text",
+        "text": {"body": body},
+    }
+    status = "disabled"
+    wa_message_id = None
+    ok = False
+
+    if WA_ENABLED and WA_ACCESS_TOKEN and WA_PHONE_NUMBER_ID:
+        try:
+            resp = requests.post(
+                f"https://graph.facebook.com/{WA_GRAPH_VERSION}/{WA_PHONE_NUMBER_ID}/messages",
+                headers={
+                    "Authorization": f"Bearer {WA_ACCESS_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=15,
+            )
+            resp_data = resp.json() if resp.content else {}
+            if resp.ok:
+                wa_message_id = ((resp_data.get("messages") or [{}])[0] or {}).get("id")
+                status = "sent"
+                ok = True
+            else:
+                status = f"http_{resp.status_code}"
+        except Exception as ex:
+            status = f"error:{ex.__class__.__name__}"
+    else:
+        status = "disabled"
+        ok = True
+
+    if contact:
+        contact.last_outbound_at = now_local()
+        contact.updated_at = now_local()
+    _wa_log_message(
+        direction="OUT",
+        phone_e164=phone,
+        body_text=body,
+        payload=payload,
+        contact_id=(contact.id if contact else None),
+        wa_message_id=wa_message_id,
+        status=status,
+    )
+    return ok
+
+def _find_active_arrival_by_dni(dni_raw: str, plant: str | None = None):
+    dni_clean = (dni_raw or "").strip()
+    dni_n = normalize_dni(dni_clean)
+    if not dni_n:
+        return None
+    q = (
+        ArrivalCheckin.query
+        .filter(
+            or_(ArrivalCheckin.dni == dni_clean, ArrivalCheckin.dni == dni_n),
+            ArrivalCheckin.status.in_(ACTIVE_ARRIVAL_STATUSES),
+        )
+        .order_by(ArrivalCheckin.registered_at.asc(), ArrivalCheckin.id.asc())
+    )
+    if plant in PLANTS:
+        q = q.filter(ArrivalCheckin.plant == plant)
+    return q.first()
+
+def _format_dt_short(dtv):
+    if not dtv:
+        return "-"
+    try:
+        return dtv.strftime("%d/%m %H:%M")
+    except Exception:
+        return str(dtv)
+
+def _wa_arrival_status_message(arrival: ArrivalCheckin):
+    if not arrival:
+        return "No tenes turno activo en este momento."
+    if arrival.status == "QUEUED":
+        ahead = _ahead_count(arrival) or 0
+        ahead_txt = "Sos el proximo." if ahead <= 0 else f"Tenes {ahead} camiones delante."
+        return (
+            f"Turno activo en {arrival.plant}. "
+            f"Estado: EN COLA. {ahead_txt} "
+            "Cuando te llamen, vas a recibir aviso por este medio."
+        )
+    if arrival.status == "CALLED":
+        return (
+            f"Turno llamado en {arrival.plant}. "
+            f"Estado: LLAMADO. Presentate antes de {_format_dt_short(arrival.expires_at)}."
+        )
+    if arrival.status == "LOADING":
+        return f"Estado: EN CARGA en {arrival.plant}."
+    return f"Estado actual: {arrival.status}."
+
+def _wa_external_status_message(contact: WhatsAppContact | None):
+    if not contact or not contact.dni:
+        return None
+    req = (
+        ArrivalExternalRequest.query
+        .filter(
+            ArrivalExternalRequest.dni == contact.dni,
+            ArrivalExternalRequest.phone_e164 == contact.phone_e164,
+        )
+        .order_by(ArrivalExternalRequest.registered_at.desc(), ArrivalExternalRequest.id.desc())
+        .first()
+    )
+    if not req:
+        return None
+    if req.status == "PENDING":
+        return (
+            f"Solicitud externa registrada para {req.plant} el {_format_dt_short(req.registered_at)}. "
+            "Estado: PENDIENTE de validacion."
+        )
+    return (
+        f"Solicitud externa #{req.id} en {req.plant}. "
+        f"Estado: {req.status}."
+    )
+
+def _wa_geo_link_for_contact(contact: WhatsAppContact, mode: str):
+    if not contact or not contact.dni:
+        return None
+    token = _issue_wa_link_token(
+        phone_e164=contact.phone_e164,
+        dni=contact.dni,
+        plant=contact.plant,
+        mode=mode,
+    )
+    if mode == "external":
+        return _build_public_url("/llegadas/externo", {"wa_token": token})
+    return _build_public_url("/llegadas", {"wa_token": token})
+
+def _wa_process_text_message(contact: WhatsAppContact, incoming_text: str):
+    text_msg = (incoming_text or "").strip()
+    text_upper = text_msg.upper()
+    responses = []
+
+    now = now_local()
+    contact.last_inbound_at = now
+    contact.updated_at = now
+
+    if text_upper in {"REINICIAR", "RESET", "INICIO", "START"}:
+        contact.state = "ASK_DNI"
+        contact.dni = None
+        contact.plant = None
+        contact.last_arrival_id = None
+        return ["Listo. Empecemos de nuevo. Enviame tu DNI (solo numeros)."]
+
+    if not text_msg:
+        return ["Enviame tu DNI para iniciar o escribi ESTADO para consultar tu turno."]
+
+    status_cmd = any(cmd in text_upper for cmd in ("ESTADO", "POSICION", "PUESTO", "COLA"))
+    plant_guess = _parse_plant_text(text_msg)
+
+    if not contact.dni:
+        dni_candidate = normalize_dni(text_msg)
+        if not dni_candidate:
+            contact.state = "ASK_DNI"
+            return ["Para empezar necesito tu DNI (solo numeros)."]
+        contact.dni = dni_candidate
+        contact.state = "ASK_PLANT"
+
+    if plant_guess:
+        contact.plant = plant_guess
+        if contact.state in {"ASK_PLANT", "EXTERNAL_FORM"}:
+            contact.state = "READY"
+
+    active_arrival_any = _find_active_arrival_by_dni(contact.dni, None)
+    if active_arrival_any and contact.plant not in PLANTS:
+        contact.plant = active_arrival_any.plant
+
+    if contact.plant not in PLANTS:
+        contact.state = "ASK_PLANT"
+        responses.append("Indica donde vas a cargar: SBE1 o SBE2.")
+        return responses
+
+    active_arrival = _find_active_arrival_by_dni(contact.dni, contact.plant) or active_arrival_any
+    if active_arrival:
+        contact.last_arrival_id = active_arrival.id
+        contact.state = "READY"
+        responses.append(_wa_arrival_status_message(active_arrival))
+        return responses
+
+    has_active_shipment = bool(find_active_shipment_by_dni(contact.dni))
+    if has_active_shipment:
+        contact.state = "READY"
+        link = _wa_geo_link_for_contact(contact, mode="known")
+        if status_cmd:
+            responses.append("No tenes turno activo todavia.")
+        responses.append(
+            "Para anunciar llegada y tomar turno usa este link: "
+            f"{link}"
+        )
+        responses.append("Despues podes consultar escribiendo ESTADO.")
+        return responses
+
+    contact.state = "EXTERNAL_FORM"
+    ext_link = _wa_geo_link_for_contact(contact, mode="external")
+    ext_msg = _wa_external_status_message(contact)
+    if ext_msg and status_cmd:
+        responses.append(ext_msg)
+        responses.append("Si queres actualizar datos, completa nuevamente este formulario:")
+        responses.append(ext_link)
+        return responses
+
+    responses.append(
+        "No encontramos un viaje activo para ese DNI. "
+        "Completa este formulario de ingreso externo con geolocalizacion:"
+    )
+    responses.append(ext_link)
+    responses.append("Luego podes consultar escribiendo ESTADO.")
+    return responses
+
+def _wa_notify_called(arrival: ArrivalCheckin):
+    if not WA_NOTIFY_CALLED_ENABLED:
+        return
+    if not arrival or arrival.status != "CALLED":
+        return
+    dni_n = normalize_dni(arrival.dni)
+    if not dni_n:
+        return
+    contacts = (
+        WhatsAppContact.query
+        .filter(WhatsAppContact.dni == dni_n)
+        .all()
+    )
+    for contact in contacts:
+        if contact.plant and contact.plant != arrival.plant:
+            continue
+        if contact.last_called_alert_arrival_id == arrival.id:
+            continue
+        msg = (
+            f"Te llamaron en {arrival.plant}. "
+            f"Presentate antes de {_format_dt_short(arrival.expires_at)}."
+        )
+        _wa_send_text(contact.phone_e164, msg, contact=contact)
+        contact.last_called_alert_arrival_id = arrival.id
+        contact.updated_at = now_local()
+
+def _wa_notify_two_ahead():
+    if not WA_NOTIFY_TWO_AHEAD_ENABLED:
+        return
+    with app.app_context():
+        now = now_local()
+        contacts = (
+            WhatsAppContact.query
+            .filter(
+                WhatsAppContact.state == "READY",
+                WhatsAppContact.dni.isnot(None),
+                WhatsAppContact.plant.isnot(None),
+            )
+            .all()
+        )
+        for contact in contacts:
+            arrival = _find_active_arrival_by_dni(contact.dni, contact.plant)
+            if not arrival or arrival.status != "QUEUED":
+                continue
+            ahead = _ahead_count(arrival) or 0
+            if ahead != 2:
+                continue
+            if contact.last_two_ahead_alert_arrival_id == arrival.id:
+                continue
+            _wa_send_text(
+                contact.phone_e164,
+                f"Atencion: te faltan 2 camiones en {arrival.plant}.",
+                contact=contact,
+            )
+            contact.last_two_ahead_alert_arrival_id = arrival.id
+            contact.updated_at = now
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Error enviando alertas dos adelante por WhatsApp")
+
+@app.get("/llegadas")
+def llegadas_page():
+    token = (request.args.get("wa_token") or "").strip()
+    prefill = {"dni": "", "plant": "", "phone": "", "mode": "known", "wa_token": ""}
+    wa_notice = None
+    if token:
+        token_data, token_error = _parse_wa_link_token(token)
+        if token_error:
+            wa_notice = "El link de WhatsApp vencio o es invalido. Solicita uno nuevo por chat."
+        else:
+            prefill["dni"] = normalize_dni(token_data.get("d") or "")
+            prefill["plant"] = ((token_data.get("pl") or "").upper() if (token_data.get("pl") or "").upper() in PLANTS else "")
+            prefill["phone"] = _normalize_phone_e164(token_data.get("p") or "")
+            prefill["mode"] = (token_data.get("m") or "known").strip().lower()
+            prefill["wa_token"] = token
+    return render_template(tpl("llegadas"), plants=PLANTS, prefill=prefill, wa_notice=wa_notice)
+
+@app.get("/llegadas/externo")
+def llegadas_externo_page():
+    token = (request.args.get("wa_token") or "").strip()
+    prefill = {"dni": "", "plant": "", "phone": "", "wa_token": ""}
+    wa_notice = None
+    if token:
+        token_data, token_error = _parse_wa_link_token(token)
+        if token_error:
+            wa_notice = "El link de WhatsApp vencio o es invalido. Solicita uno nuevo por chat."
+        else:
+            mode = (token_data.get("m") or "").strip().lower()
+            if mode and mode != "external":
+                wa_notice = "Este link no corresponde al formulario externo."
+            else:
+                prefill["dni"] = normalize_dni(token_data.get("d") or "")
+                prefill["plant"] = ((token_data.get("pl") or "").upper() if (token_data.get("pl") or "").upper() in PLANTS else "")
+                prefill["phone"] = _normalize_phone_e164(token_data.get("p") or "")
+                prefill["wa_token"] = token
+    return render_template(tpl("llegadas_externo"), plants=PLANTS, prefill=prefill, wa_notice=wa_notice)
+
+@app.post("/api/llegadas/checkin")
+def api_llegadas_checkin():
+    payload = request.get_json(silent=True) or {}
+
+    dni_raw = (payload.get("dni") or "").strip()
+    plant = (payload.get("plant") or "").strip().upper()
+    lat = _coerce_float(payload.get("lat"))
+    lon = _coerce_float(payload.get("lon"))
+    accuracy = _coerce_float(payload.get("accuracy"))
+    wa_token = (payload.get("wa_token") or "").strip()
+    wa_phone = None
+    if wa_token:
+        token_data, token_error = _parse_wa_link_token(wa_token)
+        if token_error:
+            return jsonify({"ok": False, "error": "El link de WhatsApp vencio o es invalido."}), 400
+        mode = (token_data.get("m") or "").strip().lower()
+        if mode and mode != "known":
+            return jsonify({"ok": False, "error": "El link de WhatsApp no corresponde a este formulario."}), 400
+        wa_phone = _normalize_phone_e164(token_data.get("p") or "")
+        token_dni = normalize_dni(token_data.get("d") or "")
+        token_plant = (token_data.get("pl") or "").strip().upper()
+        if token_dni and normalize_dni(dni_raw) != token_dni:
+            return jsonify({"ok": False, "error": "El DNI no coincide con el link de WhatsApp."}), 400
+        if token_plant in PLANTS and plant and plant != token_plant:
+            return jsonify({"ok": False, "error": "La planta no coincide con el link de WhatsApp."}), 400
+
+    if not dni_raw:
+        return jsonify({"ok": False, "error": "DNI obligatorio."}), 400
+    if plant not in PLANTS:
+        return jsonify({"ok": False, "error": "Planta invalida."}), 400
+    if lat is None or lon is None:
+        return jsonify({"ok": False, "error": "Coordenadas invalidas."}), 400
+
+    plant_conf = PLANTS.get(plant) or {}
+    p_lat = plant_conf.get("lat")
+    p_lon = plant_conf.get("lon")
+    if p_lat is None or p_lon is None:
+        return jsonify({"ok": False, "error": "Geocerca no configurada para la planta."}), 500
+
+    distance = haversine_m(lat, lon, p_lat, p_lon)
+    if distance > SBE_GEO_RADIUS_M:
+        return jsonify({
+            "ok": False,
+            "error": f"Fuera del radio permitido ({int(SBE_GEO_RADIUS_M)} m).",
+            "distance_m": round(distance, 2),
+        }), 400
+
+    dni_n = normalize_dni(dni_raw)
+    if not dni_n:
+        return jsonify({"ok": False, "error": "DNI invalido."}), 400
+
+    active_arrival = (
+        ArrivalCheckin.query
+        .filter(
+            or_(ArrivalCheckin.dni == dni_n, ArrivalCheckin.dni == dni_raw),
+            ArrivalCheckin.status.in_(ACTIVE_ARRIVAL_STATUSES),
+        )
+        .order_by(ArrivalCheckin.registered_at.asc(), ArrivalCheckin.id.asc())
+        .first()
+    )
+    if active_arrival:
+        if wa_phone:
+            contact = _wa_get_or_create_contact(wa_phone)
+            if contact:
+                contact.dni = dni_n
+                contact.plant = plant
+                contact.state = "READY"
+                contact.last_arrival_id = active_arrival.id
+        ahead_count = _ahead_count(active_arrival)
+        queue_position = _queue_position(active_arrival)
+        if wa_phone:
+            _wa_send_text(
+                wa_phone,
+                (
+                    f"Turno ya activo en {active_arrival.plant}. "
+                    f"Estado: {active_arrival.status}. "
+                    f"Camiones delante: {max(0, (queue_position or 1) - 1)}."
+                ),
+                contact=contact if wa_phone else None,
+            )
+            db.session.commit()
+        return jsonify({
+            "ok": True,
+            "arrival_id": active_arrival.id,
+            "status": active_arrival.status,
+            "expires_at": (
+                active_arrival.expires_at.isoformat()
+                if active_arrival.called_at and active_arrival.expires_at
+                else None
+            ),
+            "ahead_count": ahead_count,
+            "queue_position": queue_position,
+        })
+
+    shipment = find_active_shipment_by_dni(dni_raw)
+    if not shipment:
+        return jsonify({"ok": False, "error": "DNI no cuenta con viaje activo."}), 404
+
+    now = now_local()
+
+    try:
+        arrival = ArrivalCheckin(
+            plant=plant,
+            dni=dni_n,
+            shipment_id=shipment.id,
+            chofer_nombre=shipment.chofer,
+            tractor=shipment.tractor,
+            trailer=shipment.trailer,
+            transportista_id=shipment.transportista_id,
+            arenera_id=shipment.arenera_id,
+            registered_at=now,
+            expires_at=now,
+            status="QUEUED",
+            distance_m=distance,
+            accuracy_m=accuracy,
+        )
+        db.session.add(arrival)
+        db.session.flush()
+
+        ahead_count = _ahead_count(arrival)
+        queue_position = _queue_position(arrival)
+        _create_arrival_event(
+            arrival_id=arrival.id,
+            event_type="CHECKIN",
+            user_id=None,
+            created_at=now,
+            metadata={
+                "plant": plant,
+                "distance_m": round(distance, 2),
+                "accuracy_m": accuracy,
+            },
+        )
+
+        if wa_phone:
+            contact = _wa_get_or_create_contact(wa_phone)
+            if contact:
+                contact.dni = dni_n
+                contact.plant = plant
+                contact.state = "READY"
+                contact.last_arrival_id = arrival.id
+                _wa_send_text(
+                    wa_phone,
+                    (
+                        f"Turno registrado en {plant}. "
+                        f"ID: {arrival.id}. Camiones delante: {ahead_count}. "
+                        "Escribi ESTADO para consultar tu posicion."
+                    ),
+                    contact=contact,
+                )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return jsonify({
+        "ok": True,
+        "arrival_id": arrival.id,
+        "status": arrival.status,
+        "expires_at": None,
+        "ahead_count": ahead_count,
+        "queue_position": queue_position,
+    })
+
+@app.post("/api/llegadas/external-checkin")
+def api_llegadas_external_checkin():
+    payload = request.get_json(silent=True) or {}
+
+    dni_raw = (payload.get("dni") or "").strip()
+    plant = (payload.get("plant") or "").strip().upper()
+    nombre = (payload.get("nombre") or "").strip()
+    apellido = (payload.get("apellido") or "").strip()
+    empresa = (payload.get("empresa") or "").strip()
+    patente = (payload.get("patente") or "").strip().upper()
+    lat = _coerce_float(payload.get("lat"))
+    lon = _coerce_float(payload.get("lon"))
+    accuracy = _coerce_float(payload.get("accuracy"))
+    wa_token = (payload.get("wa_token") or "").strip()
+
+    if not dni_raw:
+        return jsonify({"ok": False, "error": "DNI obligatorio."}), 400
+    if plant not in PLANTS:
+        return jsonify({"ok": False, "error": "Planta invalida."}), 400
+    if lat is None or lon is None:
+        return jsonify({"ok": False, "error": "Coordenadas invalidas."}), 400
+    if not nombre or not apellido or not empresa or not patente:
+        return jsonify({"ok": False, "error": "Completa nombre, apellido, empresa y patente."}), 400
+
+    wa_phone = None
+    if wa_token:
+        token_data, token_error = _parse_wa_link_token(wa_token)
+        if token_error:
+            return jsonify({"ok": False, "error": "El link de WhatsApp vencio o es invalido."}), 400
+        mode = (token_data.get("m") or "").strip().lower()
+        if mode and mode != "external":
+            return jsonify({"ok": False, "error": "El link de WhatsApp no corresponde a formulario externo."}), 400
+        wa_phone = _normalize_phone_e164(token_data.get("p") or "")
+        token_dni = normalize_dni(token_data.get("d") or "")
+        token_plant = (token_data.get("pl") or "").strip().upper()
+        if token_dni and normalize_dni(dni_raw) != token_dni:
+            return jsonify({"ok": False, "error": "El DNI no coincide con el link de WhatsApp."}), 400
+        if token_plant in PLANTS and plant and plant != token_plant:
+            return jsonify({"ok": False, "error": "La planta no coincide con el link de WhatsApp."}), 400
+
+    plant_conf = PLANTS.get(plant) or {}
+    p_lat = plant_conf.get("lat")
+    p_lon = plant_conf.get("lon")
+    if p_lat is None or p_lon is None:
+        return jsonify({"ok": False, "error": "Geocerca no configurada para la planta."}), 500
+
+    distance = haversine_m(lat, lon, p_lat, p_lon)
+    if distance > SBE_GEO_RADIUS_M:
+        return jsonify({
+            "ok": False,
+            "error": f"Fuera del radio permitido ({int(SBE_GEO_RADIUS_M)} m).",
+            "distance_m": round(distance, 2),
+        }), 400
+
+    now = now_local()
+    dni_n = normalize_dni(dni_raw)
+    if not dni_n:
+        return jsonify({"ok": False, "error": "DNI invalido."}), 400
+
+    try:
+        ext_req = ArrivalExternalRequest(
+            phone_e164=wa_phone,
+            dni=dni_n,
+            plant=plant,
+            nombre=nombre,
+            apellido=apellido,
+            empresa=empresa,
+            patente=patente,
+            lat=lat,
+            lon=lon,
+            accuracy_m=accuracy,
+            distance_m=distance,
+            source="whatsapp_web" if wa_phone else "web",
+            status="PENDING",
+            registered_at=now,
+            metadata_json=_safe_json_dump({
+                "from_wa": bool(wa_phone),
+                "wa_token_used": bool(wa_token),
+            }),
+        )
+        db.session.add(ext_req)
+        db.session.flush()
+
+        if wa_phone:
+            contact = _wa_get_or_create_contact(wa_phone)
+            if contact:
+                contact.dni = dni_n
+                contact.plant = plant
+                contact.state = "EXTERNAL_PENDING"
+                _wa_send_text(
+                    wa_phone,
+                    (
+                        f"Solicitud externa registrada en {plant}. "
+                        f"Numero de registro: {ext_req.id}. "
+                        "Escribi ESTADO para consultar novedad."
+                    ),
+                    contact=contact,
+                )
+
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return jsonify({
+        "ok": True,
+        "request_id": ext_req.id,
+        "status": ext_req.status,
+        "message": "Solicitud externa registrada correctamente.",
+    })
+
+@app.get("/webhooks/whatsapp")
+def whatsapp_webhook_verify():
+    hub_mode = (request.args.get("hub.mode") or "").strip()
+    hub_token = (request.args.get("hub.verify_token") or "").strip()
+    hub_challenge = (request.args.get("hub.challenge") or "").strip()
+    if hub_mode == "subscribe" and WA_VERIFY_TOKEN and hub_token == WA_VERIFY_TOKEN:
+        return hub_challenge, 200
+    return "forbidden", 403
+
+@app.post("/webhooks/whatsapp")
+@csrf.exempt
+def whatsapp_webhook_receive():
+    payload = request.get_json(silent=True) or {}
+    processed = 0
+    now = now_local()
+
+    try:
+        entries = payload.get("entry") or []
+        for entry in entries:
+            changes = entry.get("changes") or []
+            for change in changes:
+                value = change.get("value") or {}
+
+                statuses = value.get("statuses") or []
+                for status_item in statuses:
+                    phone = _normalize_phone_e164((status_item.get("recipient_id") or "").strip())
+                    if phone:
+                        _wa_log_message(
+                            direction="OUT",
+                            phone_e164=phone,
+                            body_text=None,
+                            payload=status_item,
+                            wa_message_id=status_item.get("id"),
+                            status=status_item.get("status"),
+                        )
+
+                messages = value.get("messages") or []
+                for msg in messages:
+                    msg_type = (msg.get("type") or "").strip().lower()
+                    from_phone = _normalize_phone_e164((msg.get("from") or "").strip())
+                    if not from_phone:
+                        continue
+
+                    body = ""
+                    if msg_type == "text":
+                        body = ((msg.get("text") or {}).get("body") or "").strip()
+                    elif msg_type == "button":
+                        body = ((msg.get("button") or {}).get("text") or "").strip()
+                    elif msg_type == "interactive":
+                        interactive = msg.get("interactive") or {}
+                        interactive_type = (interactive.get("type") or "").strip().lower()
+                        if interactive_type == "button_reply":
+                            body = ((interactive.get("button_reply") or {}).get("title") or "").strip()
+                        elif interactive_type == "list_reply":
+                            body = ((interactive.get("list_reply") or {}).get("title") or "").strip()
+
+                    contact = _wa_get_or_create_contact(from_phone)
+                    if not contact:
+                        continue
+                    contact.last_inbound_at = now
+                    contact.updated_at = now
+
+                    _wa_log_message(
+                        direction="IN",
+                        phone_e164=from_phone,
+                        body_text=body,
+                        payload=msg,
+                        contact_id=contact.id,
+                        wa_message_id=msg.get("id"),
+                        status="received",
+                    )
+
+                    responses = _wa_process_text_message(contact, body)
+                    for response_text in responses:
+                        _wa_send_text(from_phone, response_text, contact=contact)
+                    processed += 1
+
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Error procesando webhook de WhatsApp")
+        return jsonify({"ok": False, "error": "webhook_error"}), 500
+
+    return jsonify({"ok": True, "processed": processed})
+
+@app.get("/bascula/cola")
+@login_required
+@role_required("basculista")
+def bascula_cola():
+    plant = (request.args.get("plant") or "SBE1").strip().upper()
+    if plant not in PLANTS:
+        plant = "SBE1"
+
+    now = now_local()
+    expired = (
+        ArrivalCheckin.query
+        .filter(
+            ArrivalCheckin.plant == plant,
+            ArrivalCheckin.status == "CALLED",
+            ArrivalCheckin.expires_at < now,
+        )
+        .all()
+    )
+    if expired:
+        for row in expired:
+            row.status = "EXPIRED"
+            _create_arrival_event(
+                arrival_id=row.id,
+                event_type="EXPIRE",
+                user_id=session.get("user_id"),
+                created_at=now,
+                metadata={"reason": "called_ttl_expired"},
+            )
+        db.session.commit()
+
+    arrivals = (
+        ArrivalCheckin.query
+        .filter(
+            ArrivalCheckin.plant == plant,
+            ArrivalCheckin.status.in_(ACTIVE_ARRIVAL_STATUSES),
+        )
+        .order_by(ArrivalCheckin.registered_at.asc(), ArrivalCheckin.id.asc())
+        .all()
+    )
+    first_queued = next((row for row in arrivals if row.status == "QUEUED"), None)
+    return render_template(
+        tpl("bascula_cola"),
+        plant=plant,
+        plants=PLANTS,
+        arrivals=arrivals,
+        first_queued_id=first_queued.id if first_queued else None,
+    )
+
+@app.post("/bascula/arrival/<int:arrival_id>/call")
+@login_required
+@role_required("basculista")
+def bascula_call(arrival_id: int):
+    now = now_local()
+    reason = (request.form.get("reason") or "").strip()
+    plant_form = (request.form.get("plant") or "").strip().upper()
+
+    arrival = ArrivalCheckin.query.get_or_404(arrival_id)
+    plant = plant_form if plant_form in PLANTS else arrival.plant
+
+    if arrival.status != "QUEUED":
+        flash("Solo se puede llamar un turno en estado QUEUED.", "error")
+        return redirect(url_for("bascula_cola", plant=plant))
+
+    next_arrival = (
+        ArrivalCheckin.query
+        .filter(
+            ArrivalCheckin.plant == arrival.plant,
+            ArrivalCheckin.status == "QUEUED",
+        )
+        .order_by(ArrivalCheckin.registered_at.asc(), ArrivalCheckin.id.asc())
+        .first()
+    )
+
+    out_of_order = bool(next_arrival and next_arrival.id != arrival.id)
+
+    if out_of_order and not reason:
+        flash("Agregar justificacion por el cual se adelanta este turno", "error")
+        return redirect(url_for("bascula_cola", plant=plant))
+
+    ttl_minutes = (get_config().arrival_ttl_minutes or 15)
+    ttl_minutes = ttl_minutes if ttl_minutes > 0 else 15
+    arrival.called_at = now
+    arrival.called_by = session.get("user_id")
+    arrival.called_reason = reason or None
+    arrival.expires_at = now + timedelta(minutes=ttl_minutes)
+    arrival.status = "CALLED"
+
+    _create_arrival_event(
+        arrival_id=arrival.id,
+        event_type="CALL",
+        user_id=session.get("user_id"),
+        created_at=now,
+        metadata={
+            "out_of_order": out_of_order,
+            "next_id": next_arrival.id if next_arrival else None,
+            "ttl_minutes": ttl_minutes,
+            "reason": reason or None,
+        },
+    )
+    _wa_notify_called(arrival)
+    db.session.commit()
+    flash("Turno llamado correctamente.", "success")
+    return redirect(url_for("bascula_cola", plant=plant))
+
+@app.post("/bascula/arrival/<int:arrival_id>/arrived")
+@login_required
+@role_required("basculista")
+def bascula_arrived(arrival_id: int):
+    now = now_local()
+    plant_form = (request.form.get("plant") or "").strip().upper()
+
+    arrival = ArrivalCheckin.query.get_or_404(arrival_id)
+    plant = plant_form if plant_form in PLANTS else arrival.plant
+
+    if arrival.status != "CALLED":
+        flash("Solo se puede marcar llegada para turnos en estado CALLED.", "error")
+        return redirect(url_for("bascula_cola", plant=plant))
+
+    previous_status = arrival.status
+    arrival.loading_started_at = now
+    arrival.loading_started_by = session.get("user_id")
+    arrival.status = "LOADING"
+
+    _create_arrival_event(
+        arrival_id=arrival.id,
+        event_type="LOADING_START",
+        user_id=session.get("user_id"),
+        created_at=now,
+        metadata={"from_status": previous_status},
+    )
+    db.session.commit()
+    flash("Llegada registrada: inicio de carga marcado.", "success")
+    return redirect(url_for("bascula_cola", plant=plant))
+
+@app.get("/bascula/auditoria")
+@login_required
+@role_required("admin", "gestion")
+def bascula_auditoria():
+    plant = (request.args.get("plant") or "SBE1").strip().upper()
+    if plant not in PLANTS and plant != "ALL":
+        plant = "SBE1"
+
+    start_str = (request.args.get("start") or "").strip()
+    end_str = (request.args.get("end") or "").strip()
+
+    start_date = None
+    end_date = None
+    if start_str:
+        try:
+            start_date = date.fromisoformat(start_str)
+        except ValueError:
+            start_date = None
+    if end_str:
+        try:
+            end_date = date.fromisoformat(end_str)
+        except ValueError:
+            end_date = None
+
+    q = ArrivalCheckin.query.join(Shipment, ArrivalCheckin.shipment_id == Shipment.id)
+    if plant in PLANTS:
+        q = q.filter(ArrivalCheckin.plant == plant)
+    if start_date:
+        q = q.filter(cast(ArrivalCheckin.registered_at, Date) >= start_date)
+    if end_date:
+        q = q.filter(cast(ArrivalCheckin.registered_at, Date) <= end_date)
+
+    arrivals = q.order_by(ArrivalCheckin.registered_at.desc(), ArrivalCheckin.id.desc()).all()
+
+    call_events_map = {}
+    arrival_ids = [a.id for a in arrivals]
+    if arrival_ids:
+        call_events = (
+            ArrivalEvent.query
+            .filter(ArrivalEvent.arrival_id.in_(arrival_ids), ArrivalEvent.event_type == "CALL")
+            .order_by(ArrivalEvent.arrival_id.asc(), ArrivalEvent.created_at.desc(), ArrivalEvent.id.desc())
+            .all()
+        )
+        for ev in call_events:
+            if ev.arrival_id not in call_events_map:
+                call_events_map[ev.arrival_id] = ev
+
+    rows = []
+    for arrival in arrivals:
+        shipment = arrival.shipment
+        call_event = call_events_map.get(arrival.id)
+        call_meta = _parse_event_metadata(call_event.metadata_json if call_event else "")
+
+        rows.append({
+            "arrival": arrival,
+            "shipment": shipment,
+            "called_before_real_entry": bool(
+                arrival.called_at and shipment and shipment.sbe_fecha_llegada and arrival.called_at < shipment.sbe_fecha_llegada
+            ),
+            "loading_after_expiry": bool(
+                arrival.loading_started_at and arrival.expires_at and arrival.loading_started_at > arrival.expires_at
+            ),
+            "out_of_order": bool(call_meta.get("out_of_order")),
+        })
+
+    return render_template(
+        tpl("bascula_auditoria"),
+        plant=plant,
+        plants=PLANTS,
+        start=start_str,
+        end=end_str,
+        rows=rows,
+    )
 
 # ----------------------------
 # PANEL ADMIN
@@ -514,6 +1738,7 @@ def admin_panel():
         a_list.append({"a": a, "shipments": total_ship})
 
     sub_a_list = User.query.filter(User.tipo=="arenera", User.parent_id != None).all()
+    b_list = User.query.filter_by(tipo="basculista").all()
     g_list = User.query.filter_by(tipo="gestion").all()
 
     return render_template(
@@ -521,6 +1746,7 @@ def admin_panel():
         transportistas=t_list,
         areneras=a_list,
         sub_areneras=sub_a_list,
+        basculistas=b_list,
         gestores=g_list,      
     )
 
@@ -541,7 +1767,7 @@ def create_user():
             flash("Debes seleccionar una Arenera Padre para el sub-usuario.", "error")
             return redirect(url_for("admin_panel"))
 
-    if not uname or not pwd or tipo not in ("transportista", "arenera", "gestion", "admin"):
+    if not uname or not pwd or tipo not in ("transportista", "arenera", "gestion", "admin", "basculista"):
         flash("Datos inválidos", "error")
         return redirect(url_for("admin_panel"))
 
@@ -2466,6 +3692,11 @@ def admin_config():
     if request.method == "POST":
         conf.tolerance_kg   = float(request.form.get("tolerance_kg", 0))
         conf.dispatch_price = float(request.form.get("dispatch_price", 0))
+        try:
+            ttl = int(request.form.get("arrival_ttl_minutes", 15) or 15)
+        except ValueError:
+            ttl = 15
+        conf.arrival_ttl_minutes = max(1, ttl)
         
         for key, val in request.form.items():
             if "_" not in key: continue
@@ -3274,6 +4505,8 @@ if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
     scheduler = BackgroundScheduler()
     # Programar para todos los viernes (day_of_week='fri') a las 09:00 AM
     scheduler.add_job(func=enviar_alertas_viernes, trigger="cron", day_of_week='fri', hour=9)
+    if WA_NOTIFY_TWO_AHEAD_ENABLED:
+        scheduler.add_job(func=_wa_notify_two_ahead, trigger="interval", minutes=1)
     scheduler.start()
     
     # Asegurar que se apague correctamente al cerrar la app

@@ -319,7 +319,8 @@
                       </option>
                       <option value="transportista">Transportista</option>
                       <option value="arenera">Arenera</option>
-                      <option value="sub_arenera">↳ Basculista</option>
+                      <option value="sub_arenera">Sub Arenera</option>
+                      <option value="basculista">Basculista SBE</option>
                       <option value="gestion">Usuario Gestión</option>
                       <option value="admin">Administrador</option>
                     </select>
@@ -397,13 +398,20 @@
                 <a href="{{ url_for('admin_config') }}" class="quick-link-card">
                   <i class="fa-solid fa-sliders text-secondary"></i
                   ><span>Config</span>
-                  <a
-                    href="{{ url_for('admin_fix_dates') }}"
-                    class="quick-link-card"
-                  >
-                    <i class="fa-solid fa-calendar-day text-danger"></i>
-                    <span>Corregir Fechas</span>
-                  </a>
+                </a>
+                <a
+                  href="{{ url_for('admin_fix_dates') }}"
+                  class="quick-link-card"
+                >
+                  <i class="fa-solid fa-calendar-day text-danger"></i>
+                  <span>Corregir Fechas</span>
+                </a>
+                                <a
+                  href="{{ url_for('bascula_auditoria') }}"
+                  class="quick-link-card"
+                >
+                  <i class="fa-solid fa-clipboard-check text-primary"></i
+                  ><span>Auditoria Bascula</span>
                 </a>
               </div>
             </div>
@@ -556,10 +564,48 @@
             </div>
           </div>
 
-          {% if sub_areneras %}
+          {% if basculistas %}
           <div class="card-custom">
             <div class="card-header-custom">
               <h3>Basculistas</h3>
+              <span class="stat-badge">{{ basculistas|length }}</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-custom mb-0">
+                <tbody>
+                  {% for u in basculistas %}
+                  <tr>
+                    <td class="ps-3 fw-medium text-dark">
+                      <i class="fa-solid fa-weight-scale text-muted me-2 opacity-50"></i>{{ u.username }}
+                    </td>
+                    <td class="text-end pe-3">
+                      <button
+                        type="button"
+                        onclick="promptResetPassword({{ u.id }}, '{{ u.username }}')"
+                        class="btn-icon btn-sm"
+                        title="Blanquear Clave"
+                      >
+                        <i class="fa-solid fa-key text-warning"></i>
+                      </button>
+                      <a
+                        href="#"
+                        onclick="confirmDelete('{{ url_for('delete_user', user_id=u.id) }}', '{{ u.username }}')"
+                        class="btn-icon delete btn-sm"
+                        ><i class="fa-solid fa-trash"></i
+                      ></a>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if sub_areneras %}
+          <div class="card-custom">
+            <div class="card-header-custom">
+              <h3>Sub Areneras</h3>
               <span class="stat-badge">{{ sub_areneras|length }}</span>
             </div>
             <div class="table-responsive">
